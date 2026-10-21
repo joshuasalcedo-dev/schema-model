@@ -28,7 +28,8 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - run: mvn -B -ntp compile io.joshuasalcedo.pretty:pretty-docs-maven-plugin:1.3.0:generate
+      # prefixes=false: Central's list of known groups (/.meta/prefixes.txt) lags new groups such as pretty-docs'
+      - run: mvn -B -ntp -Daether.remoteRepositoryFilter.prefixes=false compile io.joshuasalcedo.pretty:pretty-docs-maven-plugin:1.3.0:generate
       - uses: actions/upload-pages-artifact@v3
         with:
           path: target/pretty-docs
