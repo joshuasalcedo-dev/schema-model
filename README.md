@@ -74,6 +74,45 @@ Every refusal is a `SchemaException`. Its `reason()` says why (invalid, not foun
 failed, conflict), and its `problems()` list every mistake at once, each with a path to where it is, so a form can
 show them all.
 
+## What you implement
+
+Nothing, to start: every port has a default, so `Engine.builder().build()` runs entirely in memory. To keep data
+in your database or hear about changes, implement the interfaces in `io.joshuasalcedo.schema.port.out` (and
+`ActionHandler` for custom logic) and hand them to the builder.
+
+| Interface | Implement it to | Methods | Default |
+|---|---|---|---|
+| `ModelRepository` | keep models in a database | `findAll()`, `findById(id)`, `save(model)`, `delete(id)` | `InMemoryModelRepository` |
+| `RecordRepository` | keep records in a database | `findAll(model)`, `find(model, id)`, `save(record)` → boolean, `delete(model, id, version)` → boolean | `InMemoryRecordRepository` |
+| `ActionRepository` | keep action definitions in a database | `findAll()`, `find(name)`, `save(action)`, `delete(name)` | `InMemoryActionRepository` |
+| `FileStore` | keep uploaded files (S3, R2, a disk) | `put(name, contentType, content)`, `open(location)`, `exists(location)`, `delete(location)` | `InMemoryFileStore` (`DirectoryFileStore` for a folder) |
+| `RecordEvents` | hear every saved record change (message bus, audit log) | `publish(event)` | `RecordEvents.none()` |
+| `ModelEvents` | hear every model change | `created(model)`, `updated(before, after)`, `deleted(model)` | `ModelEvents.none()` |
+| `VocabularyProvider` | check the glossary terms models point to | `current()` | any term accepted |
+| `ActionHandler` (`engine`) | run Java code an action calls by name (`Step.Call`) | `handle(context)` | none: register only what your actions call |
+
+Everything that reaches a port has already been checked, so adapters only store and forward. The one rule an
+adapter keeps itself: `RecordRepository.save` stores a record only if the stored version is `record.version() - 1`
+(version 1 means "must not exist yet"), and `delete` only if the version matches; both return false otherwise. In
+SQL that is `UPDATE ... WHERE version = ?` plus a unique key on `(model, id)`. That is how two writers never
+overwrite each other.
+
+Wiring them in:
+
+```java
+Engine engine = Engine.builder()
+        .models(new ModelService(new JdbcModelRepository(db), myGlossary, myModelEvents))
+        .records(new JdbcRecordRepository(db))
+        .actions(new JdbcActionRepository(db))
+        .files(new DirectoryFileStore(Path.of("uploads")))
+        .events(event -> bus.publish(event.name(), event))        // RecordEvents
+        .handler("billing.refund", context -> refunds.issue(context))
+        .build();
+```
+
+`Jdbc...Repository`, `myGlossary` and the rest are yours; `ModelService`, `DirectoryFileStore` and the in-memory
+adapters come with the library.
+
 ## Packages
 
 | Package | What it holds |

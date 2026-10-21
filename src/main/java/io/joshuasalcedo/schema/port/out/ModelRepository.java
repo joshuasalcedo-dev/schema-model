@@ -6,9 +6,9 @@ import io.joshuasalcedo.schema.Model;
 
 /**
  * Outbound port: where models are kept. The library ships
- * {@link io.joshuasalcedo.schema.adapter.InMemoryModelRepository}; a service implements this over its database (the knowledge
- * service's {@code models} table, for example). Models arrive here already checked; the repository only stores
- * them.
+ * {@link io.joshuasalcedo.schema.adapter.InMemoryModelRepository}; an application implements this over its database (a
+ * {@code models} table with the model as JSON, for example). Models arrive here already checked; the repository only
+ * stores them.
  */
 public interface ModelRepository {
 
