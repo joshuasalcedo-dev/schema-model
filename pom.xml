@@ -45,7 +45,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <cel.version>0.14.0</cel.version>
         <junit.version>6.0.1</junit.version>
-        <assertj.version>3.27.6</assertj.version>
+        <assertj.version>3.27.7</assertj.version>
         <flatlaf.version>3.7.2</flatlaf.version>
     </properties>
 
