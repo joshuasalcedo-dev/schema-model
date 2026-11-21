@@ -29,6 +29,9 @@ import io.joshuasalcedo.schema.port.out.VocabularyProvider;
 public final class ModelService implements ModelDesign {
 
     private final ModelRepository repository;
+    private final io.joshuasalcedo.schema.port.out.TaxonomyRepository taxonomies;
+    private final io.joshuasalcedo.schema.port.out.DecisionRepository decisions;
+    private final io.joshuasalcedo.schema.port.out.LifecycleRepository lifecycles;
     private final VocabularyProvider vocabulary;
     private final ModelEvents events;
 
@@ -40,6 +43,47 @@ public final class ModelService implements ModelDesign {
      * @param events     told after each successful change
      */
     public ModelService(ModelRepository repository, VocabularyProvider vocabulary, ModelEvents events) {
+        this(repository, new io.joshuasalcedo.schema.adapter.InMemoryTaxonomyRepository(),
+             new io.joshuasalcedo.schema.adapter.InMemoryDecisionRepository(), vocabulary, events);
+    }
+
+    /**
+     * Model, taxonomy, decision-table and lifecycle use cases over the given ports.
+     *
+     * @param repository where models live
+     * @param taxonomies where taxonomies live
+     * @param decisions  where decision tables live
+     * @param lifecycles where lifecycles live
+     * @param vocabulary the glossary models may point to
+     * @param events     hears model changes
+     */
+    public ModelService(ModelRepository repository, io.joshuasalcedo.schema.port.out.TaxonomyRepository taxonomies,
+                        io.joshuasalcedo.schema.port.out.DecisionRepository decisions,
+                        io.joshuasalcedo.schema.port.out.LifecycleRepository lifecycles, VocabularyProvider vocabulary,
+                        ModelEvents events) {
+        this.taxonomies = Objects.requireNonNull(taxonomies, "taxonomies");
+        this.decisions = Objects.requireNonNull(decisions, "decisions");
+        this.lifecycles = Objects.requireNonNull(lifecycles, "lifecycles");
+        this.repository = Objects.requireNonNull(repository, "repository");
+        this.vocabulary = Objects.requireNonNull(vocabulary, "vocabulary");
+        this.events = Objects.requireNonNull(events, "events");
+    }
+
+    /**
+     * Model, taxonomy and decision-table use cases over the given ports.
+     *
+     * @param repository where models live
+     * @param taxonomies where taxonomies live
+     * @param decisions  where decision tables live
+     * @param vocabulary the glossary models may point to
+     * @param events     hears model changes
+     */
+    public ModelService(ModelRepository repository, io.joshuasalcedo.schema.port.out.TaxonomyRepository taxonomies,
+                        io.joshuasalcedo.schema.port.out.DecisionRepository decisions, VocabularyProvider vocabulary,
+                        ModelEvents events) {
+        this.taxonomies = Objects.requireNonNull(taxonomies, "taxonomies");
+        this.decisions = Objects.requireNonNull(decisions, "decisions");
+        this.lifecycles = new io.joshuasalcedo.schema.adapter.InMemoryLifecycleRepository();
         this.repository = Objects.requireNonNull(repository, "repository");
         this.vocabulary = Objects.requireNonNull(vocabulary, "vocabulary");
         this.events = Objects.requireNonNull(events, "events");
@@ -107,7 +151,9 @@ public final class ModelService implements ModelDesign {
 
     @Override
     public Schema schema() {
-        return Schema.builder().vocabulary(vocabulary.current()).models(repository.findAll()).buildUnchecked();
+        return Schema.builder().vocabulary(vocabulary.current()).models(repository.findAll())
+                .taxonomies(taxonomies.findAll()).decisions(decisions.findAll()).lifecycles(lifecycles.findAll())
+                .buildUnchecked();
     }
 
     @Override
@@ -118,5 +164,75 @@ public final class ModelService implements ModelDesign {
     @Override
     public List<Finding> analyze() {
         return SchemaAnalysis.analyze(schema());
+    }
+
+    @Override
+    public synchronized io.joshuasalcedo.schema.Taxonomy saveTaxonomy(io.joshuasalcedo.schema.Taxonomy taxonomy) {
+        schema().with(taxonomy); // checks it
+        taxonomies.save(taxonomy);
+        return taxonomy;
+    }
+
+    @Override
+    public synchronized void deleteTaxonomy(String id) {
+        schema().withoutTaxonomy(id); // refuses while a field takes its terms
+        taxonomies.delete(id);
+    }
+
+    @Override
+    public Optional<io.joshuasalcedo.schema.Taxonomy> getTaxonomy(String id) {
+        return taxonomies.findById(id);
+    }
+
+    @Override
+    public List<io.joshuasalcedo.schema.Taxonomy> listTaxonomies() {
+        return taxonomies.findAll();
+    }
+
+    @Override
+    public synchronized io.joshuasalcedo.schema.action.DecisionTable saveDecision(
+            io.joshuasalcedo.schema.action.DecisionTable decision) {
+        schema().with(decision); // checks it
+        decisions.save(decision);
+        return decision;
+    }
+
+    @Override
+    public synchronized void deleteDecision(String id) {
+        schema().withoutDecision(id);
+        decisions.delete(id);
+    }
+
+    @Override
+    public Optional<io.joshuasalcedo.schema.action.DecisionTable> getDecision(String id) {
+        return decisions.findById(id);
+    }
+
+    @Override
+    public List<io.joshuasalcedo.schema.action.DecisionTable> listDecisions() {
+        return decisions.findAll();
+    }
+
+    @Override
+    public synchronized io.joshuasalcedo.schema.Lifecycle saveLifecycle(io.joshuasalcedo.schema.Lifecycle lifecycle) {
+        schema().with(lifecycle); // checks it
+        lifecycles.save(lifecycle);
+        return lifecycle;
+    }
+
+    @Override
+    public synchronized void deleteLifecycle(String id) {
+        schema().withoutLifecycle(id);
+        lifecycles.delete(id);
+    }
+
+    @Override
+    public Optional<io.joshuasalcedo.schema.Lifecycle> getLifecycle(String id) {
+        return lifecycles.findById(id);
+    }
+
+    @Override
+    public List<io.joshuasalcedo.schema.Lifecycle> listLifecycles() {
+        return lifecycles.findAll();
     }
 }

@@ -28,7 +28,11 @@ class PatternPresetsTest {
             Map.entry("ipv4", List.of("192.168.1.10", "0.0.0.0", "255.255.255.255")),
             Map.entry("semver", List.of("1.4.2", "2.0.0-rc.1+build.5", "0.0.1")),
             Map.entry("country-code", List.of("PH", "de")),
-            Map.entry("currency-code", List.of("USD", "eur")));
+            Map.entry("currency-code", List.of("USD", "eur")),
+            Map.entry("snake-case", List.of("metro_station", "zone_2", " a ")),
+            Map.entry("camel-case", List.of("metroStation", "zone2Platform", "a")),
+            Map.entry("pascal-case", List.of("MetroStation", "Zone2", "A")),
+            Map.entry("constant-case", List.of("METRO_STATION", "ZONE_2")));
 
     private static final Map<String, List<String>> BAD = Map.ofEntries(
             Map.entry("email", List.of("ana", "ana@example", "a b@example.com")),
@@ -44,7 +48,11 @@ class PatternPresetsTest {
             Map.entry("ipv4", List.of("256.1.1.1", "1.2.3", "01.2.3.4")),
             Map.entry("semver", List.of("1.2", "01.2.3", "1.2.3-")),
             Map.entry("country-code", List.of("PHL", "P1")),
-            Map.entry("currency-code", List.of("US", "US1")));
+            Map.entry("currency-code", List.of("US", "US1")),
+            Map.entry("snake-case", List.of("Metro_Station", "metro__station", "metro station", "_a")),
+            Map.entry("camel-case", List.of("MetroStation", "metro_station", "metro station")),
+            Map.entry("pascal-case", List.of("metroStation", "Metro_Station", "Metro Station")),
+            Map.entry("constant-case", List.of("Metro_Station", "METRO__STATION", "METRO STATION")));
 
     @Test
     void everyPresetAcceptsAndRefusesItsExamples() {

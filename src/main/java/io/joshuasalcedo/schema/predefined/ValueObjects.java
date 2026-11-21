@@ -248,6 +248,43 @@ public final class ValueObjects {
                            .description("A second line, such as an apartment or suite."))
             .build();
 
+
+    /** {@code Person} ({@code person}): a person as a value, with how to reach them. */
+    public static final Model PERSON = Model.valueObject("Person")
+            .description("A person as a value: who signed, who requested, who to contact. Their name, what they do, "
+                         + "how to reach them and the organisation they belong to; an id when they are known to "
+                         + "some system (a staff number, a user id). A person with a history of their own is an "
+                         + "entity instead.")
+            .field(Field.model("name", "full-name").required())
+            .field(Field.text("personId").normalize(TRIM, BLANK_TO_ABSENT)
+                           .description("Their id in the system or organisation that knows them: staff number, "
+                                        + "user id."))
+            .field(Field.text("jobTitle").normalize(TRIM, COLLAPSE_SPACES, BLANK_TO_ABSENT))
+            .field(Field.text("organization").normalize(TRIM, COLLAPSE_SPACES, BLANK_TO_ABSENT)
+                           .description("The organisation they belong to, by name or code."))
+            .field(Field.model("email", "email-address"))
+            .field(Field.model("phone", "phone-number"))
+            .build();
+
+    /** {@code Company} ({@code company}): an organisation as a value, with its registration and how to reach it. */
+    public static final Model COMPANY = Model.valueObject("Company")
+            .description("A company or other organisation as a value: the party on an invoice, a supplier on a "
+                         + "quotation. Its trading and legal names, registration and tax numbers, and how to reach "
+                         + "it. An organisation with a history of its own is an entity instead.")
+            .field(Field.text("name").required().normalize(TRIM, COLLAPSE_SPACES)
+                           .description("The name it trades under."))
+            .field(Field.text("legalName").normalize(TRIM, COLLAPSE_SPACES, BLANK_TO_ABSENT)
+                           .description("The registered legal name, when it differs."))
+            .field(Field.text("registrationNumber").normalize(TRIM, BLANK_TO_ABSENT)
+                           .description("Commercial registration number, as written."))
+            .field(Field.text("taxNumber").normalize(TRIM, BLANK_TO_ABSENT)
+                           .description("Tax or VAT registration number, as written."))
+            .field(Field.model("email", "email-address"))
+            .field(Field.model("phone", "phone-number"))
+            .field(Field.model("website", "link"))
+            .field(Field.model("address", "address"))
+            .build();
+
     // ==================== financial ====================
 
     /** {@code Currency} ({@code currency}): a fiat currency or a crypto coin. */
@@ -287,6 +324,26 @@ public final class ValueObjects {
             .description("A wallet address on a coin's network.")
             .field(Field.text("address").required().description("The address text; its format is not checked."))
             .field(Field.choice("coin", JavaEnums.CRYPTO_COIN).required().normalize(TRIM, UPPERCASE))
+            .build();
+
+
+    /** {@code BankAccount} ({@code bank-account}): where money is paid to. */
+    public static final Model BANK_ACCOUNT = Model.valueObject("BankAccount")
+            .description("A bank account to pay into: whose it is, the bank, its IBAN or local account number, "
+                         + "the SWIFT/BIC code and the account's currency.")
+            .field(Field.text("accountName").required().normalize(TRIM, COLLAPSE_SPACES)
+                           .description("The account holder's name, as the bank has it."))
+            .field(Field.text("bankName").normalize(TRIM, COLLAPSE_SPACES, BLANK_TO_ABSENT))
+            .field(Field.text("iban").normalize(TRIM, UPPERCASE, BLANK_TO_ABSENT)
+                           .pattern("[A-Z]{2}[0-9]{2}[A-Z0-9 ]{11,40}")
+                           .description("The IBAN, with or without spaces between groups."))
+            .field(Field.text("accountNumber").normalize(TRIM, BLANK_TO_ABSENT)
+                           .description("The local account number, where there is no IBAN."))
+            .field(Field.text("swiftBic").normalize(TRIM, UPPERCASE, BLANK_TO_ABSENT)
+                           .pattern("[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?")
+                           .description("The bank's SWIFT/BIC code, 8 or 11 characters."))
+            .field(Field.model("currency", "currency"))
+            .invariant("has(value.iban) || has(value.accountNumber)", "give an IBAN or an account number")
             .build();
 
     // ==================== geo ====================
@@ -340,6 +397,15 @@ public final class ValueObjects {
             .description("A weight or mass: a value in a metric or imperial unit, never negative.")
             .field(Field.decimal("value").required().min("0").description("The number of units, 0 or more."))
             .field(Field.choice("unit", JavaEnums.WEIGHT_UNIT).required().normalize(TRIM, UPPERCASE))
+            .build();
+
+    /** {@code Quantity} ({@code quantity}): an amount of something in any unit. */
+    public static final Model QUANTITY = Model.valueObject("Quantity")
+            .description("A quantity of something in a unit: 3 pieces, 2.5 hours, 12 m2. The unit is a UN/CEFACT "
+                         + "code (C62 piece, HUR hour, MTK square metre) or the business's own word.")
+            .field(Field.decimal("value").required().description("The number of units; may be negative for a return."))
+            .field(Field.text("unit").required().normalize(TRIM, COLLAPSE_SPACES)
+                           .description("The unit, such as C62, HUR, MTK, or each, box, visit."))
             .build();
 
     /** {@code FileSize} ({@code file-size}): an amount of data in a binary or decimal unit. */
@@ -447,6 +513,39 @@ public final class ValueObjects {
             .field(Field.date("startDate").required())
             .field(Field.date("endDate").required().description("Not before the start date."))
             .invariant("value.endDate >= value.startDate", "the end date cannot be before the start date")
+            .build();
+
+    /** The IANA time-zone ids this Java knows (Asia/Qatar, Europe/London ...), sorted. */
+    private static final String[] ZONE_IDS = java.time.ZoneId.getAvailableZoneIds().stream().sorted().toArray(String[]::new);
+
+    /** {@code TimeZone} ({@code time-zone}): a place's time zone, by its IANA id. */
+    public static final Model TIME_ZONE = Model.valueObject("TimeZone")
+            .description("A time zone by its IANA id, such as Asia/Qatar or Europe/London: the rules of a place's "
+                         + "clocks, summer time included. Not an offset: +03:00 says nothing about next summer.")
+            .field(Field.choice("id", ZONE_IDS).required().normalize(TRIM)
+                           .description("The IANA (tz database) id, as java.time.ZoneId knows it."))
+            .build();
+
+    /** {@code ZonedDateTime} ({@code zoned-date-time}): a local date and time in a named time zone. */
+    public static final Model ZONED_DATE_TIME = Model.valueObject("ZonedDateTime")
+            .description("A date and time as the clock on the wall shows it in a time zone: a meeting at 09:00 in "
+                         + "Doha stays at 09:00 Doha time even if the zone's rules change. Use a TIMESTAMP field for "
+                         + "an instant that only needs to be ordered.")
+            .field(Field.text("dateTime").required().normalize(TRIM)
+                           .pattern("[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+                                    + "T(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\\.[0-9]{1,9})?)?")
+                           .description("The local date and time, ISO-8601 without an offset: 2026-11-21T09:00."))
+            .field(Field.model("zone", "time-zone").required())
+            .build();
+
+    /** {@code TimeOfDay} ({@code time-of-day}): a time on the 24-hour clock, optionally in a time zone. */
+    public static final Model TIME_OF_DAY = Model.valueObject("TimeOfDay")
+            .description("A time of day on the 24-hour clock, such as 06:00 or 22:30, for opening hours, shift "
+                         + "starts and cut-off times; with a time zone when it belongs to a place.")
+            .field(Field.text("time").required().normalize(TRIM)
+                           .pattern("(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?")
+                           .description("HH:mm or HH:mm:ss, 24-hour."))
+            .field(Field.model("zone", "time-zone").description("The zone it is in; absent = wherever it is used."))
             .build();
 
     /** {@code DateTimeWithZone} ({@code date-time-with-zone}): a date and time with its offset from UTC. */
@@ -609,7 +708,7 @@ public final class ValueObjects {
      * object holds is in the same area, listed before it.
      */
     public enum Area {
-        /** People and how to reach them: names, email, phone, links, addresses. */
+        /** People and organisations and how to reach them: names, email, phone, links, addresses, a person, a company. */
         CONTACT,
         /** Money and currencies. */
         FINANCIAL,
@@ -639,14 +738,14 @@ public final class ValueObjects {
          */
         public List<Model> models() {
             return switch (this) {
-                case CONTACT -> List.of(USERNAME, EMAIL_ADDRESS, FULL_NAME, PHONE_NUMBER, LINK, ADDRESS);
-                case FINANCIAL -> List.of(CURRENCY, MONEY, PERCENTAGE, CRYPTO_CURRENCY_ADDRESS);
+                case CONTACT -> List.of(USERNAME, EMAIL_ADDRESS, FULL_NAME, PHONE_NUMBER, LINK, ADDRESS, PERSON, COMPANY);
+                case FINANCIAL -> List.of(CURRENCY, MONEY, PERCENTAGE, CRYPTO_CURRENCY_ADDRESS, BANK_ACCOUNT);
                 case GEO -> List.of(COORDINATES, POSTAL_CODE);
                 case IDENTIFIER -> List.of(SLUG);
-                case MEASUREMENT -> List.of(DISTANCE, WEIGHT, FILE_SIZE);
+                case MEASUREMENT -> List.of(DISTANCE, WEIGHT, QUANTITY, FILE_SIZE);
                 case NETWORK -> List.of(DOMAIN_NAME, IPV4_ADDRESS, IPV6_ADDRESS, IP_ADDRESS, MAC_ADDRESS, PORT,
                                         SSH_CONNECTION);
-                case TEMPORAL -> List.of(DATE_OF_BIRTH, DATE_RANGE, DATE_TIME_WITH_ZONE, DURATION_NANO,
+                case TEMPORAL -> List.of(DATE_OF_BIRTH, DATE_RANGE, TIME_ZONE, ZONED_DATE_TIME, TIME_OF_DAY, DATE_TIME_WITH_ZONE, DURATION_NANO,
                                          EFFECTIVE_PERIOD, RECURRENCE, TIME, TIME_BLOCK, TIMESTAMP);
                 case VERSIONING -> List.of(SEMANTIC_VERSION);
                 case VISUAL -> List.of(COLOR);

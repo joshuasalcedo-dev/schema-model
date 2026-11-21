@@ -187,6 +187,19 @@ public final class RecordValues {
                     add(context, at, "'" + s + "' does not match " + field.pattern());
                     return null;
                 }
+                if (field.isCategory()) {
+                    var taxonomy = context.schema().taxonomy(field.taxonomy());
+                    if (taxonomy.isEmpty()) {
+                        add(context, at, "taxonomy '" + field.taxonomy() + "' was not found");
+                        return null;
+                    }
+                    var term = taxonomy.get().term(s).or(() -> taxonomy.get().find(s));
+                    if (term.isEmpty()) {
+                        add(context, at, "'" + s + "' is not a term of " + taxonomy.get().name());
+                        return null;
+                    }
+                    return term.get().code(); // a label or alias is stored as the term's code
+                }
                 return s;
             }
             case CHOICE -> {
@@ -301,7 +314,7 @@ public final class RecordValues {
         for (Invariant invariant : model.invariants()) {
             Object result;
             try {
-                result = Expressions.shared().eval(invariant.expression(), variables);
+                result = Expressions.shared().eval(invariant.expression(), variables, context.schema());
             } catch (IllegalArgumentException e) {
                 add(context, at, "could not check '" + invariant.expression() + "': " + e.getMessage());
                 continue;

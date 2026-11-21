@@ -10,6 +10,12 @@ table or endpoint. This is how metadata-driven platforms such as Salesforce or S
 - **Actions**: business logic as data: input fields, rules (CEL) that must hold, steps that set fields, call Java
   handlers or emit events. All or nothing
 - **Ports and adapters**: storage, files and events plug in; in-memory adapters are included
+- **Lifecycles**: the states a record goes through and the moves between them; people name and colour the states,
+  code reads each state's fixed phase
+- **Taxonomies**: lists or trees of terms records are classified under (`IS_A('facility-types', x, 'station')`)
+- **Decision tables**: rules as a spreadsheet, one row per rule (`DECIDE('sla', record).responseTime`)
+- **Spreadsheet functions** in expressions: `SUM`, `IF`, `ROUND`, `DATE_ADD`, `DAYS_BETWEEN`, `FORMAT`, `TO_CASE`,
+  `IN_WORDS`, `MONEY` and more
 - **Predefined value objects**: Money, EmailAddress, Address, countries, currencies
 - One dependency: Google's [CEL](https://github.com/google/cel-java)
 
@@ -23,14 +29,14 @@ Maven:
 <dependency>
     <groupId>io.joshuasalcedo</groupId>
     <artifactId>schema-model</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```kotlin
-implementation("io.joshuasalcedo:schema-model:0.1.0")
+implementation("io.joshuasalcedo:schema-model:0.2.0")
 ```
 
 Java 25.
@@ -68,6 +74,35 @@ Model.valueObject("DateRange")
         .build();
 ```
 
+A lifecycle, a taxonomy and a decision table, all business data stored and changed at runtime like models:
+
+```java
+Lifecycle.named("Facility lifecycle")
+        .state(State.of("active", "Active", Phase.ACTIVE).asInitial().withColor("#16A34A"))
+        .state(State.of("under_maintenance", "Under maintenance", Phase.ON_HOLD))
+        .state(State.of("decommissioned", "Decommissioned", Phase.RETIRED).asTerminal())
+        .transition(Transition.of("start_maintenance", "Start maintenance", "under_maintenance", "active"))
+        .transition(Transition.of("finish_maintenance", "Finish maintenance", "active", "under_maintenance"))
+        .transition(Transition.of("decommission", "Decommission", "decommissioned", "active", "under_maintenance"))
+        .build();
+
+Taxonomy.named("Facility types")
+        .term("station", "Station")
+        .term("platform", "Platform", "station")     // under station
+        .build();
+
+DecisionTable.named("SLA")
+        .input("priority").input("contractType")
+        .output("responseTime").output("penalty")
+        .row("'emergency'", "-", "'PT4H'", "1.0")
+        .row("'high'", "'comprehensive'", "'PT8H'", "0.5")
+        .row("-", "-", "'P5D'", "0")                 // "-" matches anything
+        .build();
+```
+
+A cell is `-` (any), a value (`'high'`, `5`), a comparison (`> 1000`), a range (`[1..10]`) or a list
+(`in ['a', 'b']`); the first matching row answers.
+
 ## Errors
 
 Every refusal is a `SchemaException`. Its `reason()` says why (invalid, not found, already exists, in use, rule
@@ -85,6 +120,9 @@ in your database or hear about changes, implement the interfaces in `io.joshuasa
 | `ModelRepository` | keep models in a database | `findAll()`, `findById(id)`, `save(model)`, `delete(id)` | `InMemoryModelRepository` |
 | `RecordRepository` | keep records in a database | `findAll(model)`, `find(model, id)`, `save(record)` → boolean, `delete(model, id, version)` → boolean | `InMemoryRecordRepository` |
 | `ActionRepository` | keep action definitions in a database | `findAll()`, `find(name)`, `save(action)`, `delete(name)` | `InMemoryActionRepository` |
+| `LifecycleRepository` | keep lifecycles in a database | `findAll()`, `findById(id)`, `save(lifecycle)`, `delete(id)` | `InMemoryLifecycleRepository` |
+| `TaxonomyRepository` | keep taxonomies in a database | `findAll()`, `findById(id)`, `save(taxonomy)`, `delete(id)` | `InMemoryTaxonomyRepository` |
+| `DecisionRepository` | keep decision tables in a database | `findAll()`, `findById(id)`, `save(table)`, `delete(id)` | `InMemoryDecisionRepository` |
 | `FileStore` | keep uploaded files (S3, R2, a disk) | `put(name, contentType, content)`, `open(location)`, `exists(location)`, `delete(location)` | `InMemoryFileStore` (`DirectoryFileStore` for a folder) |
 | `RecordEvents` | hear every saved record change (message bus, audit log) | `publish(event)` | `RecordEvents.none()` |
 | `ModelEvents` | hear every model change | `created(model)`, `updated(before, after)`, `deleted(model)` | `ModelEvents.none()` |
@@ -101,7 +139,9 @@ Wiring them in:
 
 ```java
 Engine engine = Engine.builder()
-        .models(new ModelService(new JdbcModelRepository(db), myGlossary, myModelEvents))
+        .models(new ModelService(new JdbcModelRepository(db), new JdbcTaxonomyRepository(db),
+                                 new JdbcDecisionRepository(db), new JdbcLifecycleRepository(db),
+                                 myGlossary, myModelEvents))
         .records(new JdbcRecordRepository(db))
         .actions(new JdbcActionRepository(db))
         .files(new DirectoryFileStore(Path.of("uploads")))
@@ -117,9 +157,9 @@ adapters come with the library.
 
 | Package | What it holds |
 |---|---|
-| `io.joshuasalcedo.schema` | `Model`, `Field`, `Schema`, the rules (`SchemaValidator`) and quality checks (`SchemaAnalysis`) |
+| `io.joshuasalcedo.schema` | `Model`, `Field`, `Schema`, `Lifecycle`, `Taxonomy`, `TextCase`, the rules (`SchemaValidator`) and quality checks (`SchemaAnalysis`) |
 | `...schema.record` | Records, checked and converted against their model |
-| `...schema.action` | Actions: input, CEL rules, steps |
+| `...schema.action` | Actions: input, CEL rules, steps; decision tables; the functions expressions can call |
 | `...schema.engine` | The `Engine` that runs everything, and Java handlers actions can call |
 | `...schema.port.in` / `port.out` | What callers use (`Platform`, `ModelDesign`); what an application plugs in (storage, events, vocabulary) |
 | `...schema.adapter` | In-memory adapters for the outbound ports |

@@ -80,4 +80,101 @@ public interface ModelDesign {
      * @return the findings; empty when there is nothing to improve
      */
     List<Finding> analyze();
+
+    /**
+     * Creates or replaces a taxonomy. Checked first: codes unique, parents that exist, no term under itself.
+     *
+     * @param taxonomy the taxonomy
+     * @return the stored taxonomy
+     * @throws io.joshuasalcedo.schema.SchemaException if it is invalid
+     */
+    io.joshuasalcedo.schema.Taxonomy saveTaxonomy(io.joshuasalcedo.schema.Taxonomy taxonomy);
+
+    /**
+     * Deletes a taxonomy; refused while a field takes its terms.
+     *
+     * @param id the taxonomy's ID
+     * @throws io.joshuasalcedo.schema.SchemaException if it does not exist or is in use
+     */
+    void deleteTaxonomy(String id);
+
+    /**
+     * A taxonomy by its ID.
+     *
+     * @param id the ID
+     * @return the taxonomy, or empty
+     */
+    Optional<io.joshuasalcedo.schema.Taxonomy> getTaxonomy(String id);
+
+    /**
+     * All taxonomies.
+     *
+     * @return the taxonomies
+     */
+    List<io.joshuasalcedo.schema.Taxonomy> listTaxonomies();
+
+    /**
+     * Creates or replaces a decision table. Checked first: row sizes, names, cells that compile.
+     *
+     * @param decision the table
+     * @return the stored table
+     * @throws io.joshuasalcedo.schema.SchemaException if it is invalid
+     */
+    io.joshuasalcedo.schema.action.DecisionTable saveDecision(io.joshuasalcedo.schema.action.DecisionTable decision);
+
+    /**
+     * Deletes a decision table.
+     *
+     * @param id the table's ID
+     * @throws io.joshuasalcedo.schema.SchemaException if it does not exist
+     */
+    void deleteDecision(String id);
+
+    /**
+     * A decision table by its ID.
+     *
+     * @param id the ID
+     * @return the table, or empty
+     */
+    Optional<io.joshuasalcedo.schema.action.DecisionTable> getDecision(String id);
+
+    /**
+     * All decision tables.
+     *
+     * @return the tables
+     */
+    List<io.joshuasalcedo.schema.action.DecisionTable> listDecisions();
+
+    /**
+     * Creates or replaces a lifecycle. Checked first: one initial state, real states in every transition, colours,
+     * icons, states that can be reached.
+     *
+     * @param lifecycle the lifecycle
+     * @return the stored lifecycle
+     * @throws io.joshuasalcedo.schema.SchemaException if it is invalid
+     */
+    io.joshuasalcedo.schema.Lifecycle saveLifecycle(io.joshuasalcedo.schema.Lifecycle lifecycle);
+
+    /**
+     * Deletes a lifecycle.
+     *
+     * @param id the lifecycle's ID
+     * @throws io.joshuasalcedo.schema.SchemaException if it does not exist
+     */
+    void deleteLifecycle(String id);
+
+    /**
+     * A lifecycle by its ID.
+     *
+     * @param id the ID
+     * @return the lifecycle, or empty
+     */
+    Optional<io.joshuasalcedo.schema.Lifecycle> getLifecycle(String id);
+
+    /**
+     * All lifecycles.
+     *
+     * @return the lifecycles
+     */
+    List<io.joshuasalcedo.schema.Lifecycle> listLifecycles();
 }

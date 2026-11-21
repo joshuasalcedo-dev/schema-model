@@ -390,7 +390,7 @@ public final class Engine implements Platform {
         variables.put("linked", RecordValues.toExpressionValue(linked));
         variables.putAll(Expressions.clock(now));
         try {
-            return expressions.eval(expression, variables);
+            return expressions.eval(expression, variables, models.schema());
         } catch (IllegalArgumentException e) {
             throw new SchemaException(SchemaException.Reason.INVALID, at,
                                       at + " could not be evaluated: " + e.getMessage());
@@ -513,6 +513,66 @@ public final class Engine implements Platform {
         @Override
         public List<Finding> analyze() {
             return models.analyze();
+        }
+
+        @Override
+        public io.joshuasalcedo.schema.Taxonomy saveTaxonomy(io.joshuasalcedo.schema.Taxonomy taxonomy) {
+            return models.saveTaxonomy(taxonomy);
+        }
+
+        @Override
+        public void deleteTaxonomy(String id) {
+            models.deleteTaxonomy(id);
+        }
+
+        @Override
+        public Optional<io.joshuasalcedo.schema.Taxonomy> getTaxonomy(String id) {
+            return models.getTaxonomy(id);
+        }
+
+        @Override
+        public List<io.joshuasalcedo.schema.Taxonomy> listTaxonomies() {
+            return models.listTaxonomies();
+        }
+
+        @Override
+        public io.joshuasalcedo.schema.action.DecisionTable saveDecision(io.joshuasalcedo.schema.action.DecisionTable decision) {
+            return models.saveDecision(decision);
+        }
+
+        @Override
+        public void deleteDecision(String id) {
+            models.deleteDecision(id);
+        }
+
+        @Override
+        public Optional<io.joshuasalcedo.schema.action.DecisionTable> getDecision(String id) {
+            return models.getDecision(id);
+        }
+
+        @Override
+        public List<io.joshuasalcedo.schema.action.DecisionTable> listDecisions() {
+            return models.listDecisions();
+        }
+
+        @Override
+        public io.joshuasalcedo.schema.Lifecycle saveLifecycle(io.joshuasalcedo.schema.Lifecycle lifecycle) {
+            return models.saveLifecycle(lifecycle);
+        }
+
+        @Override
+        public void deleteLifecycle(String id) {
+            models.deleteLifecycle(id);
+        }
+
+        @Override
+        public Optional<io.joshuasalcedo.schema.Lifecycle> getLifecycle(String id) {
+            return models.getLifecycle(id);
+        }
+
+        @Override
+        public List<io.joshuasalcedo.schema.Lifecycle> listLifecycles() {
+            return models.listLifecycles();
         }
     }
 

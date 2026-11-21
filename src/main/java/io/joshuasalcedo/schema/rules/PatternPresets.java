@@ -51,7 +51,17 @@ public final class PatternPresets {
             preset("country-code", "Country code", "An ISO 3166-1 alpha-2 country code such as PH or DE.",
                    "[A-Z]{2}", Normalize.TRIM, Normalize.UPPERCASE),
             preset("currency-code", "Currency code", "An ISO 4217 currency code such as USD or EUR.",
-                   "[A-Z]{3}", Normalize.TRIM, Normalize.UPPERCASE));
+                   "[A-Z]{3}", Normalize.TRIM, Normalize.UPPERCASE),
+            // text cases that must be typed as they are (kebab-case is slug; to convert what users type instead, normalise with
+            // Normalize.SNAKE_CASE and the others)
+            preset("snake-case", "snake_case", "Lower-case words joined by underscores, e.g. metro_station; not converted.",
+                   io.joshuasalcedo.schema.TextCase.SNAKE.pattern(), Normalize.TRIM),
+            preset("camel-case", "camelCase", "Words run together, the first lower case, e.g. metroStation; not converted.",
+                   io.joshuasalcedo.schema.TextCase.CAMEL.pattern(), Normalize.TRIM),
+            preset("pascal-case", "PascalCase", "Capitalised words run together, e.g. MetroStation; not converted.",
+                   io.joshuasalcedo.schema.TextCase.PASCAL.pattern(), Normalize.TRIM),
+            preset("constant-case", "CONSTANT_CASE", "Upper-case words joined by underscores, e.g. METRO_STATION; not converted.",
+                   io.joshuasalcedo.schema.TextCase.CONSTANT.pattern(), Normalize.TRIM));
 
     private static final Map<String, PatternPreset> BY_ID =
             ALL.stream().collect(Collectors.toUnmodifiableMap(PatternPreset::id, p -> p));

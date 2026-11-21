@@ -13,6 +13,8 @@ import java.util.Objects;
  * Field.text("email").required().term("email-address").pattern(".+@.+")
  * Field.choice("status", "active", "closed")
  * Field.model("billingAddress", "address")
+ * Field.category("facilityType", "facility-types")          // a term of a taxonomy
+ * Field.text("notes").format(TextFormat.MARKDOWN)
  * }</pre>
  * A field is immutable. Absent text parts are stored as empty strings and absent choices as an empty list, never
  * null. Whether a field is valid is decided by {@link SchemaValidator}, not when it is built, so a half-finished
@@ -39,11 +41,15 @@ import java.util.Objects;
  * @param maxLength   TEXT only: the most characters allowed, after {@code normalize}; null for no limit
  * @param scale       DECIMAL only: values are rounded half-even to this many decimal places before they are checked
  *                    and stored (as {@code BigDecimal.setScale} does); null to keep them as given
+ * @param taxonomy    TEXT only: the ID of the {@link Taxonomy} whose term codes are the allowed values (an active
+ *                    term of it); empty when the field is free text
+ * @param format      TEXT only: how the text is written and shown (one line, several lines, Markdown, HTML);
+ *                    {@link TextFormat#PLAIN} when not set
  */
 public record Field(String name, FieldType type, String term, String model, List<String> choices, boolean required,
                     boolean repeated, boolean identity, String pattern, String description,
                     List<Normalize> normalize, BigDecimal min, BigDecimal max, Integer minLength, Integer maxLength,
-                    Integer scale) {
+                    Integer scale, String taxonomy, TextFormat format) {
 
     /** Replaces null text with empty strings and copies the lists so the field cannot change later. */
     public Field {
@@ -54,6 +60,45 @@ public record Field(String name, FieldType type, String term, String model, List
         pattern = Objects.requireNonNullElse(pattern, "");
         description = Objects.requireNonNullElse(description, "");
         normalize = normalize == null ? List.of() : List.copyOf(normalize);
+        taxonomy = Objects.requireNonNullElse(taxonomy, "");
+        format = Objects.requireNonNullElse(format, TextFormat.PLAIN);
+    }
+
+    /**
+     * A field without a taxonomy or text format: the form before they existed, kept so existing callers still
+     * compile.
+     *
+     * @param name        the field name
+     * @param type        the field type
+     * @param term        the glossary term, or empty
+     * @param model       the held model's ID, for MODEL fields
+     * @param choices     the allowed values, for CHOICE fields
+     * @param required    a value must be present
+     * @param repeated    a list of values
+     * @param identity    part of an entity's identity
+     * @param pattern     the full-match regular expression, or empty
+     * @param description notes, or empty
+     * @param normalize   clean-ups, in order
+     * @param min         smallest number, or null
+     * @param max         largest number, or null
+     * @param minLength   fewest characters, or null
+     * @param maxLength   most characters, or null
+     * @param scale       decimal places, or null
+     */
+    public Field(String name, FieldType type, String term, String model, List<String> choices, boolean required,
+                 boolean repeated, boolean identity, String pattern, String description, List<Normalize> normalize,
+                 BigDecimal min, BigDecimal max, Integer minLength, Integer maxLength, Integer scale) {
+        this(name, type, term, model, choices, required, repeated, identity, pattern, description, normalize, min,
+             max, minLength, maxLength, scale, "", TextFormat.PLAIN);
+    }
+
+    /**
+     * Whether the field's values are the term codes of a taxonomy.
+     *
+     * @return true when {@link #taxonomy()} is set
+     */
+    public boolean isCategory() {
+        return !taxonomy.isEmpty();
     }
 
     /**
@@ -74,7 +119,7 @@ public record Field(String name, FieldType type, String term, String model, List
     public Field(String name, FieldType type, String term, String model, List<String> choices, boolean required,
                  boolean repeated, boolean identity, String pattern, String description) {
         this(name, type, term, model, choices, required, repeated, identity, pattern, description, List.of(), null,
-             null, null, null, null);
+             null, null, null, null, "", TextFormat.PLAIN);
     }
 
     /**
@@ -172,6 +217,18 @@ public record Field(String name, FieldType type, String term, String model, List
     }
 
     /**
+     * Starts a category field: TEXT whose value is the code of an active term of a {@link Taxonomy}, such as a
+     * facility type or a priority. Make it {@code repeated()} for several terms.
+     *
+     * @param name       the field name
+     * @param taxonomyId the ID of the taxonomy
+     * @return a builder for the field
+     */
+    public static Builder category(String name, String taxonomyId) {
+        return of(name, FieldType.TEXT).taxonomy(taxonomyId);
+    }
+
+    /**
      * A builder holding this field's values, to make a changed copy.
      *
      * @return a builder starting from this field
@@ -192,6 +249,8 @@ public record Field(String name, FieldType type, String term, String model, List
         b.minLength = minLength;
         b.maxLength = maxLength;
         b.scale = scale;
+        b.taxonomy = taxonomy;
+        b.format = format;
         return b;
     }
 
@@ -216,6 +275,8 @@ public record Field(String name, FieldType type, String term, String model, List
         private Integer minLength;
         private Integer maxLength;
         private Integer scale;
+        private String taxonomy = "";
+        private TextFormat format = TextFormat.PLAIN;
 
         private Builder(String name, FieldType type) {
             this.name = name;
@@ -415,13 +476,35 @@ public record Field(String name, FieldType type, String term, String model, List
         }
 
         /**
+         * Makes a TEXT field take the term codes of a taxonomy: a value must be the code of an active term.
+         *
+         * @param taxonomyId the taxonomy's ID
+         * @return this builder
+         */
+        public Builder taxonomy(String taxonomyId) {
+            this.taxonomy = taxonomyId;
+            return this;
+        }
+
+        /**
+         * Sets how a TEXT value is written and shown: one line (the default), several lines, Markdown or HTML.
+         *
+         * @param format the text format
+         * @return this builder
+         */
+        public Builder format(TextFormat format) {
+            this.format = format;
+            return this;
+        }
+
+        /**
          * Makes the field.
          *
          * @return an immutable field with the options set so far
          */
         public Field build() {
             return new Field(name, type, term, model, choices, required, repeated, identity, pattern, description,
-                             normalize, min, max, minLength, maxLength, scale);
+                             normalize, min, max, minLength, maxLength, scale, taxonomy, format);
         }
     }
 }

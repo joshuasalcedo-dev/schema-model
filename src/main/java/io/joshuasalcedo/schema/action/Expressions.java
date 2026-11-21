@@ -1,6 +1,7 @@
 package io.joshuasalcedo.schema.action;
 
 import dev.cel.common.CelAbstractSyntaxTree;
+import dev.cel.common.CelOptions;
 import dev.cel.common.CelValidationException;
 import dev.cel.common.types.MapType;
 import dev.cel.common.types.SimpleType;
@@ -13,6 +14,7 @@ import dev.cel.runtime.CelRuntimeFactory;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@code now}: the current instant, {@code today}: the current date (UTC), both as ISO-8601 text</li>
  * </ul>
  * Besides CEL's own functions: {@code addDays(date, n)}, {@code addMonths(date, n)} and {@code daysBetween(from, to)}
- * (see {@link DateFunctions}).
+ * (see {@link DateFunctions}), and spreadsheet-style functions for people who write Excel formulas: {@code SUM},
+ * {@code ROUND}, {@code IF}, {@code COALESCE}, {@code DATE_ADD}, {@code MONEY} and more (see {@link ExcelFunctions}).
  * Dates and instants are text written with a fixed width ({@link #timestamp(Instant)}), so comparing them as text
  * gives the same answer as comparing them in time, and a date compares correctly with an instant
  * ({@code value.birthDate <= today}). Compiled programs are cached, so running an expression again does not parse
@@ -35,7 +38,10 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class Expressions {
 
+    /** Whole and decimal numbers compare with each other (3 < 3.5), as people expect from a spreadsheet. */
+    private static final CelOptions OPTIONS = CelOptions.current().enableHeterogeneousNumericComparisons(true).build();
     private static final CelCompiler COMPILER = CelCompilerFactory.standardCelCompilerBuilder()
+            .setOptions(OPTIONS)
             .setStandardMacros(CelStandardMacro.STANDARD_MACROS) // has(), all(), exists(), map(), filter()
             .addVar("record", MapType.create(SimpleType.STRING, SimpleType.DYN))
             .addVar("input", MapType.create(SimpleType.STRING, SimpleType.DYN))
@@ -43,14 +49,24 @@ public final class Expressions {
             .addVar("value", MapType.create(SimpleType.STRING, SimpleType.DYN))
             .addVar("now", SimpleType.STRING)
             .addVar("today", SimpleType.STRING)
+            .addVar("facts", MapType.create(SimpleType.STRING, SimpleType.DYN)) // a decision table's facts
+            .addVar("v", SimpleType.DYN)                                          // a decision cell's input value
             .addFunctionDeclarations(DateFunctions.declarations()) // addDays, addMonths, daysBetween
+            .addFunctionDeclarations(ExcelFunctions.declarations()) // SUM, ROUND, IF, DATE_ADD ...
+            .addFunctionDeclarations(SchemaFunctions.declarations()) // IS_A, PARENT_OF, LABEL_OF, ANCESTORS, DECIDE
             .build();
     private static final CelRuntime RUNTIME = CelRuntimeFactory.standardCelRuntimeBuilder()
+            .setOptions(OPTIONS)
             .addFunctionBindings(DateFunctions.bindings())
+            .addFunctionBindings(ExcelFunctions.bindings())
+            .addFunctionBindings(SchemaFunctions.bindings())
             .build();
     private static final DateTimeFormatter TIMESTAMP =
             DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'").withZone(ZoneOffset.UTC);
     private static final Expressions SHARED = new Expressions();
+    private static volatile Object celNull;
+    /** The schema the running expression belongs to, for its taxonomies and decision tables. */
+    static final ScopedValue<io.joshuasalcedo.schema.Schema> SCHEMA = ScopedValue.newInstance();
 
     private final Map<String, CelRuntime.Program> programs = new ConcurrentHashMap<>();
 
@@ -76,6 +92,25 @@ public final class Expressions {
      */
     public static String timestamp(Instant instant) {
         return TIMESTAMP.format(instant);
+    }
+
+    /** CEL's null value, as functions return it for "empty". */
+    static Object celNull() {
+        Object n = celNull;
+        if (n == null) {
+            n = SHARED.eval("null", Map.of());
+            celNull = n;
+        }
+        return n;
+    }
+
+    /**
+     * The names of the spreadsheet-style functions expressions can call (SUM, ROUND, IF, DATE_ADD ...).
+     *
+     * @return the function names
+     */
+    public static List<String> spreadsheetFunctions() {
+        return ExcelFunctions.names();
     }
 
     /**
@@ -125,6 +160,23 @@ public final class Expressions {
         } catch (CelEvaluationException e) {
             throw new IllegalArgumentException(withCause(e), e);
         }
+    }
+
+    /**
+     * Runs an expression that may use the schema's taxonomies ({@code IS_A}, {@code PARENT_OF}, {@code LABEL_OF},
+     * {@code ANCESTORS}) and decision tables ({@code DECIDE}).
+     *
+     * @param expression the CEL expression
+     * @param variables  the variables it uses, already in CEL types
+     * @param schema     the schema; null for none (those functions then fail)
+     * @return the result as a CEL Java value
+     * @throws IllegalArgumentException if it does not compile or fails while running
+     */
+    public Object eval(String expression, Map<String, ?> variables, io.joshuasalcedo.schema.Schema schema) {
+        if (schema == null) {
+            return eval(expression, variables);
+        }
+        return ScopedValue.where(SCHEMA, schema).call(() -> eval(expression, variables));
     }
 
     /** CEL's message, plus the reason a function of ours gave (e.g. "'next week' is not a date"), which CEL hides. */

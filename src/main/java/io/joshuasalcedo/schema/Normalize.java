@@ -45,7 +45,21 @@ public enum Normalize {
      * Converts an internationalised domain name to its ASCII (punycode) form and lower-cases it
      * ({@code Bücher.example} becomes {@code xn--bcher-kva.example}), as {@code java.net.IDN} does.
      */
-    IDN_ASCII;
+    IDN_ASCII,
+    /** Writes the words in snake_case: {@code Metro Station} becomes {@code metro_station} (see {@link TextCase}). */
+    SNAKE_CASE,
+    /** Writes the words in kebab-case: {@code Metro Station} becomes {@code metro-station}. */
+    KEBAB_CASE,
+    /** Writes the words in camelCase: {@code Metro Station} becomes {@code metroStation}. */
+    CAMEL_CASE,
+    /** Writes the words in PascalCase: {@code Metro Station} becomes {@code MetroStation}. */
+    PASCAL_CASE,
+    /** Writes the words in CONSTANT_CASE: {@code Metro Station} becomes {@code METRO_STATION}. */
+    CONSTANT_CASE,
+    /** Writes the words in Title Case: {@code metro_station} becomes {@code Metro Station}. */
+    TITLE_CASE,
+    /** Writes the words in Sentence case: {@code METRO_STATION} becomes {@code Metro station}. */
+    SENTENCE_CASE;
 
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final Pattern IPV6_CHARS = Pattern.compile("[0-9A-Fa-f:.]+");
@@ -69,6 +83,13 @@ public enum Normalize {
             case IPV6_CANONICAL -> ipv6(value);
             case MAC_CANONICAL -> mac(value);
             case IDN_ASCII -> idn(value);
+            case SNAKE_CASE -> TextCase.SNAKE.apply(value);
+            case KEBAB_CASE -> TextCase.KEBAB.apply(value);
+            case CAMEL_CASE -> TextCase.CAMEL.apply(value);
+            case PASCAL_CASE -> TextCase.PASCAL.apply(value);
+            case CONSTANT_CASE -> TextCase.CONSTANT.apply(value);
+            case TITLE_CASE -> TextCase.TITLE.apply(value);
+            case SENTENCE_CASE -> TextCase.SENTENCE.apply(value);
         };
     }
 

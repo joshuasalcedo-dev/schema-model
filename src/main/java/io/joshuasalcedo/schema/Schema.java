@@ -27,10 +27,194 @@ public final class Schema {
 
     private final Map<String, Model> models;
     private final Vocabulary vocabulary;
+    private final Map<String, Taxonomy> taxonomies;
+    private final Map<String, io.joshuasalcedo.schema.action.DecisionTable> decisions;
+    private Map<String, Lifecycle> lifecycles = Map.of();
 
     private Schema(Map<String, Model> models, Vocabulary vocabulary) {
+        this(models, vocabulary, Map.of(), Map.of());
+    }
+
+    private Schema(Map<String, Model> models, Vocabulary vocabulary, Map<String, Taxonomy> taxonomies,
+                   Map<String, io.joshuasalcedo.schema.action.DecisionTable> decisions) {
         this.models = models;
         this.vocabulary = vocabulary;
+        this.taxonomies = taxonomies;
+        this.decisions = decisions;
+    }
+
+    /**
+     * The taxonomies, by ID: the classifications category fields take their terms from.
+     *
+     * @return the taxonomies, unmodifiable
+     */
+    public Collection<Taxonomy> taxonomies() {
+        return taxonomies.values();
+    }
+
+    /**
+     * A taxonomy by its ID.
+     *
+     * @param id the ID
+     * @return the taxonomy, or empty
+     */
+    public Optional<Taxonomy> taxonomy(String id) {
+        return Optional.ofNullable(taxonomies.get(id));
+    }
+
+    /**
+     * The decision tables, by ID.
+     *
+     * @return the tables, unmodifiable
+     */
+    public Collection<io.joshuasalcedo.schema.action.DecisionTable> decisions() {
+        return decisions.values();
+    }
+
+    /**
+     * A decision table by its ID.
+     *
+     * @param id the ID
+     * @return the table, or empty
+     */
+    public Optional<io.joshuasalcedo.schema.action.DecisionTable> decision(String id) {
+        return Optional.ofNullable(decisions.get(id));
+    }
+
+    /**
+     * The lifecycles, by ID: the states records go through and the moves allowed between them.
+     *
+     * @return the lifecycles, unmodifiable
+     */
+    public Collection<Lifecycle> lifecycles() {
+        return lifecycles.values();
+    }
+
+    /**
+     * A lifecycle by its ID.
+     *
+     * @param id the ID
+     * @return the lifecycle, or empty
+     */
+    public Optional<Lifecycle> lifecycle(String id) {
+        return Optional.ofNullable(lifecycles.get(id));
+    }
+
+    /**
+     * This schema with a lifecycle added or replaced.
+     *
+     * @param lifecycle the lifecycle
+     * @return a new schema
+     * @throws SchemaException if the lifecycle is invalid
+     */
+    public Schema with(Lifecycle lifecycle) {
+        List<SchemaProblem> problems = lifecycle.validate();
+        if (!problems.isEmpty()) {
+            throw new SchemaException(problems);
+        }
+        Map<String, Lifecycle> copy = new LinkedHashMap<>(lifecycles);
+        copy.put(lifecycle.id(), lifecycle);
+        return withLifecycles(Collections.unmodifiableMap(copy));
+    }
+
+    /**
+     * This schema without a lifecycle.
+     *
+     * @param id the lifecycle's ID
+     * @return a new schema
+     * @throws SchemaException if it does not exist
+     */
+    public Schema withoutLifecycle(String id) {
+        if (!lifecycles.containsKey(id)) {
+            throw SchemaException.notFound(id);
+        }
+        Map<String, Lifecycle> copy = new LinkedHashMap<>(lifecycles);
+        copy.remove(id);
+        return withLifecycles(Collections.unmodifiableMap(copy));
+    }
+
+    private Schema withLifecycles(Map<String, Lifecycle> next) {
+        Schema s = new Schema(models, vocabulary, taxonomies, decisions);
+        s.lifecycles = next;
+        return s;
+    }
+
+    private Schema keepLifecycles(Schema s) {
+        s.lifecycles = this.lifecycles;
+        return s;
+    }
+
+    /**
+     * This schema with a taxonomy added or replaced.
+     *
+     * @param taxonomy the taxonomy
+     * @return a new schema
+     * @throws SchemaException if the taxonomy is invalid
+     */
+    public Schema with(Taxonomy taxonomy) {
+        List<SchemaProblem> problems = taxonomy.validate();
+        if (!problems.isEmpty()) {
+            throw new SchemaException(problems);
+        }
+        Map<String, Taxonomy> copy = new LinkedHashMap<>(taxonomies);
+        copy.put(taxonomy.id(), taxonomy);
+        return keepLifecycles(new Schema(models, vocabulary, Collections.unmodifiableMap(copy), decisions));
+    }
+
+    /**
+     * This schema with a decision table added or replaced.
+     *
+     * @param decision the table
+     * @return a new schema
+     * @throws SchemaException if the table is invalid
+     */
+    public Schema with(io.joshuasalcedo.schema.action.DecisionTable decision) {
+        List<SchemaProblem> problems = decision.validate();
+        if (!problems.isEmpty()) {
+            throw new SchemaException(problems);
+        }
+        Map<String, io.joshuasalcedo.schema.action.DecisionTable> copy = new LinkedHashMap<>(decisions);
+        copy.put(decision.id(), decision);
+        return keepLifecycles(new Schema(models, vocabulary, taxonomies, Collections.unmodifiableMap(copy)));
+    }
+
+    /**
+     * This schema without a taxonomy.
+     *
+     * @param id the taxonomy's ID
+     * @return a new schema
+     * @throws SchemaException if it does not exist, or a field still takes its terms
+     */
+    public Schema withoutTaxonomy(String id) {
+        if (!taxonomies.containsKey(id)) {
+            throw SchemaException.notFound(id);
+        }
+        List<String> usedBy = models.values().stream()
+                .filter(m -> m.fields().stream().anyMatch(f -> f.taxonomy().equals(id)))
+                .map(Model::id).toList();
+        if (!usedBy.isEmpty()) {
+            throw new SchemaException(SchemaException.Reason.IN_USE, id, "taxonomy '" + id + "' is used by "
+                                      + String.join(", ", usedBy) + "; change those fields first");
+        }
+        Map<String, Taxonomy> copy = new LinkedHashMap<>(taxonomies);
+        copy.remove(id);
+        return keepLifecycles(new Schema(models, vocabulary, Collections.unmodifiableMap(copy), decisions));
+    }
+
+    /**
+     * This schema without a decision table.
+     *
+     * @param id the table's ID
+     * @return a new schema
+     * @throws SchemaException if it does not exist
+     */
+    public Schema withoutDecision(String id) {
+        if (!decisions.containsKey(id)) {
+            throw SchemaException.notFound(id);
+        }
+        Map<String, io.joshuasalcedo.schema.action.DecisionTable> copy = new LinkedHashMap<>(decisions);
+        copy.remove(id);
+        return keepLifecycles(new Schema(models, vocabulary, taxonomies, Collections.unmodifiableMap(copy)));
     }
 
     /**
@@ -117,7 +301,7 @@ public final class Schema {
         SchemaValidator.requireValid(model, this);
         Map<String, Model> copy = new LinkedHashMap<>(models);
         copy.put(model.id(), model);
-        return new Schema(Collections.unmodifiableMap(copy), vocabulary);
+        return keepLifecycles(new Schema(Collections.unmodifiableMap(copy), vocabulary, taxonomies, decisions));
     }
 
     /**
@@ -137,7 +321,7 @@ public final class Schema {
         }
         Map<String, Model> copy = new LinkedHashMap<>(models);
         copy.remove(id);
-        return new Schema(Collections.unmodifiableMap(copy), vocabulary);
+        return keepLifecycles(new Schema(Collections.unmodifiableMap(copy), vocabulary, taxonomies, decisions));
     }
 
     /**
@@ -197,6 +381,9 @@ public final class Schema {
         private final Map<String, Model> models = new LinkedHashMap<>();
         private final List<SchemaProblem> duplicates = new ArrayList<>();
         private Vocabulary vocabulary = Vocabulary.open();
+        private final Map<String, Taxonomy> taxonomies = new LinkedHashMap<>();
+        private final Map<String, io.joshuasalcedo.schema.action.DecisionTable> decisions = new LinkedHashMap<>();
+        private final Map<String, Lifecycle> lifecycles = new LinkedHashMap<>();
 
         private Builder() {
         }
@@ -242,6 +429,81 @@ public final class Schema {
          * @param models the models
          * @return this builder
          */
+        /**
+         * Adds a taxonomy.
+         *
+         * @param taxonomy the taxonomy
+         * @return this builder
+         */
+        public Builder taxonomy(Taxonomy taxonomy) {
+            if (taxonomies.putIfAbsent(taxonomy.id(), taxonomy) != null) {
+                duplicates.add(new SchemaProblem("taxonomies[" + taxonomy.id() + "]",
+                                                 "taxonomies[" + taxonomy.id() + "] the ID '" + taxonomy.id() + "' is used twice"));
+            }
+            return this;
+        }
+
+        /**
+         * Adds taxonomies.
+         *
+         * @param taxonomies the taxonomies
+         * @return this builder
+         */
+        public Builder taxonomies(Collection<Taxonomy> taxonomies) {
+            taxonomies.forEach(this::taxonomy);
+            return this;
+        }
+
+        /**
+         * Adds a decision table.
+         *
+         * @param decision the table
+         * @return this builder
+         */
+        public Builder decision(io.joshuasalcedo.schema.action.DecisionTable decision) {
+            if (decisions.putIfAbsent(decision.id(), decision) != null) {
+                duplicates.add(new SchemaProblem("decisions[" + decision.id() + "]",
+                                                 "decisions[" + decision.id() + "] the ID '" + decision.id() + "' is used twice"));
+            }
+            return this;
+        }
+
+        /**
+         * Adds decision tables.
+         *
+         * @param decisions the tables
+         * @return this builder
+         */
+        public Builder decisions(Collection<io.joshuasalcedo.schema.action.DecisionTable> decisions) {
+            decisions.forEach(this::decision);
+            return this;
+        }
+
+        /**
+         * Adds a lifecycle.
+         *
+         * @param lifecycle the lifecycle
+         * @return this builder
+         */
+        public Builder lifecycle(Lifecycle lifecycle) {
+            if (lifecycles.putIfAbsent(lifecycle.id(), lifecycle) != null) {
+                duplicates.add(new SchemaProblem("lifecycles[" + lifecycle.id() + "]",
+                                                 "lifecycles[" + lifecycle.id() + "] the ID '" + lifecycle.id() + "' is used twice"));
+            }
+            return this;
+        }
+
+        /**
+         * Adds lifecycles.
+         *
+         * @param lifecycles the lifecycles
+         * @return this builder
+         */
+        public Builder lifecycles(Collection<Lifecycle> lifecycles) {
+            lifecycles.forEach(this::lifecycle);
+            return this;
+        }
+
         public Builder models(Collection<Model> models) {
             models.forEach(this::model);
             return this;
@@ -271,7 +533,11 @@ public final class Schema {
          * @return the schema, valid or not
          */
         public Schema buildUnchecked() {
-            return new Schema(Collections.unmodifiableMap(new LinkedHashMap<>(models)), vocabulary);
+            Schema schema = new Schema(Collections.unmodifiableMap(new LinkedHashMap<>(models)), vocabulary,
+                                       Collections.unmodifiableMap(new LinkedHashMap<>(taxonomies)),
+                                       Collections.unmodifiableMap(new LinkedHashMap<>(decisions)));
+            schema.lifecycles = Collections.unmodifiableMap(new LinkedHashMap<>(lifecycles));
+            return schema;
         }
     }
 }

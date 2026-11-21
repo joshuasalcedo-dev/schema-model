@@ -224,7 +224,10 @@ public final class ValueFormats {
     private String single(Field field, Object value) {
         try {
             return switch (field.type()) {
-                case TEXT -> String.valueOf(value);
+                case TEXT -> field.isCategory()
+                        ? schema.taxonomy(field.taxonomy()).flatMap(t -> t.term(String.valueOf(value)))
+                                .map(io.joshuasalcedo.schema.Taxonomy.Term::label).orElse(String.valueOf(value))
+                        : String.valueOf(value);
                 case CHOICE -> Labels.choice(String.valueOf(value));
                 case BOOLEAN -> Boolean.TRUE.equals(value) ? "Yes" : "No";
                 case INTEGER, DECIMAL -> value instanceof Number n ? number(n) : String.valueOf(value);

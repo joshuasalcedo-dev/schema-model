@@ -26,7 +26,7 @@ class ValueObjectsTest {
     void theWholeCatalogIsAValidSchema() {
         assertThatCode(() -> Schema.builder().models(ValueObjects.all()).build()).doesNotThrowAnyException();
         assertThat(SCHEMA.validate()).isEmpty();
-        assertThat(ValueObjects.all()).hasSize(39).allMatch(Model::isValueObject);
+        assertThat(ValueObjects.all()).hasSize(46).allMatch(Model::isValueObject);
     }
 
     @Test

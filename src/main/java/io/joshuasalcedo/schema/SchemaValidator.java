@@ -35,6 +35,15 @@ public final class SchemaValidator {
         for (Model model : schema.models()) {
             check(model, schema, "models[" + model.id() + "]", problems);
         }
+        for (Taxonomy taxonomy : schema.taxonomies()) {
+            problems.addAll(taxonomy.validate());
+        }
+        for (var decision : schema.decisions()) {
+            problems.addAll(decision.validate());
+        }
+        for (Lifecycle lifecycle : schema.lifecycles()) {
+            problems.addAll(lifecycle.validate());
+        }
         return problems;
     }
 
@@ -165,6 +174,12 @@ public final class SchemaValidator {
         if (field.minLength() != null && field.maxLength() != null && field.minLength() > field.maxLength()) {
             add(problems, at + ".minLength", "is above maxLength");
         }
+        if (field.format() != TextFormat.PLAIN && !text) {
+            add(problems, at + ".format", "is only for TEXT fields");
+        }
+        if (field.isCategory() && !text) {
+            add(problems, at + ".taxonomy", "is only for TEXT fields");
+        }
         if (field.scale() != null && type != FieldType.DECIMAL) {
             add(problems, at + ".scale", "is only for DECIMAL fields");
         } else if (field.scale() != null && (field.scale() < 0 || field.scale() > 18)) {
@@ -187,6 +202,9 @@ public final class SchemaValidator {
             return;
         }
         checkLimits(field, at, problems);
+        if (field.isCategory() && schema != null && schema.taxonomy(field.taxonomy()).isEmpty()) {
+            add(problems, at + ".taxonomy", "taxonomy '" + field.taxonomy() + "' was not found");
+        }
         switch (field.type()) {
             case MODEL -> {
                 if (field.model().isBlank()) {
