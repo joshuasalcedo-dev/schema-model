@@ -44,6 +44,7 @@
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <cel.version>0.14.0</cel.version>
+        <value-object.version>0.1.0</value-object.version>
         <junit.version>6.0.1</junit.version>
         <assertj.version>3.27.7</assertj.version>
         <flatlaf.version>3.7.2</flatlaf.version>
@@ -55,6 +56,12 @@
             <groupId>dev.cel</groupId>
             <artifactId>cel</artifactId>
             <version>${cel.version}</version>
+        </dependency>
+        <!-- The predefined value objects: generated from these Java value objects, checked and printed by them -->
+        <dependency>
+            <groupId>io.joshuasalcedo</groupId>
+            <artifactId>value-object</artifactId>
+            <version>${value-object.version}</version>
         </dependency>
 
         <dependency>

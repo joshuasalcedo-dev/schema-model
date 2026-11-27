@@ -20,7 +20,8 @@ import io.joshuasalcedo.schema.Field;
 import io.joshuasalcedo.schema.FieldType;
 import io.joshuasalcedo.schema.Model;
 import io.joshuasalcedo.schema.Schema;
-import io.joshuasalcedo.schema.predefined.ValueObjectFormats;
+import io.joshuasalcedo.schema.predefined.MediaObjects;
+import io.joshuasalcedo.schema.predefined.ValueObjectLibrary;
 import io.joshuasalcedo.schema.record.Record;
 
 /**
@@ -77,7 +78,8 @@ public final class ValueFormats {
     }
 
     /**
-     * Formats with every default and the predefined value object formats.
+     * Formats with every default; the predefined value objects ({@link ValueObjectLibrary}) print as their Java value
+     * objects do.
      *
      * @param schema the models
      * @param lookup the records
@@ -87,7 +89,20 @@ public final class ValueFormats {
      */
     public static ValueFormats defaults(Schema schema, RecordLookup lookup, Locale locale, ZoneId zone) {
         ValueFormats formats = new ValueFormats(schema, lookup, locale, zone);
-        ValueObjectFormats.register(formats);
+        MediaObjects.register(formats);
+        // the library's value objects print the way their Java value objects print themselves
+        for (Model model : ValueObjectLibrary.all()) {
+            formats.register(model.id(), (values, f) -> {
+                if (f.schema().model(model.id()).filter(ValueObjectLibrary::isLibraryModel).isEmpty()) {
+                    throw new IllegalStateException("not the library's " + model.id());
+                }
+                String text = ValueObjectLibrary.text(model.id(), values);
+                if (text == null) {
+                    throw new IllegalArgumentException("not a valid " + model.id());
+                }
+                return text;
+            });
+        }
         return formats;
     }
 

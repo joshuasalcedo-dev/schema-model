@@ -19,7 +19,7 @@ import io.joshuasalcedo.schema.SchemaException;
 import io.joshuasalcedo.schema.adapter.DirectoryFileStore;
 import io.joshuasalcedo.schema.engine.Engine;
 import io.joshuasalcedo.schema.port.out.FileStore;
-import io.joshuasalcedo.schema.predefined.ValueObjects;
+import io.joshuasalcedo.schema.predefined.MediaObjects;
 import io.joshuasalcedo.schema.record.Record;
 import io.joshuasalcedo.schema.text.RecordLookup;
 import io.joshuasalcedo.schema.text.ValueFormats;
@@ -32,7 +32,7 @@ class FilesTest {
 
     private Engine engine() {
         Engine engine = Engine.builder().maxFileBytes(1024).build();
-        ValueObjects.install(engine.models());
+        MediaObjects.install(engine.models());
         engine.models().createModel(Model.entity("Product")
                 .field(Field.text("sku").identity().required())
                 .field(Field.model("photo", "image"))

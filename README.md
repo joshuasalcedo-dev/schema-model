@@ -16,8 +16,11 @@ table or endpoint. This is how metadata-driven platforms such as Salesforce or S
 - **Decision tables**: rules as a spreadsheet, one row per rule (`DECIDE('sla', record).responseTime`)
 - **Spreadsheet functions** in expressions: `SUM`, `IF`, `ROUND`, `DATE_ADD`, `DAYS_BETWEEN`, `FORMAT`, `TO_CASE`,
   `IN_WORDS`, `MONEY` and more
-- **Predefined value objects**: Money, EmailAddress, Address, countries, currencies
-- One dependency: Google's [CEL](https://github.com/google/cel-java)
+- **Predefined value objects**: every value object of
+  [io.joshuasalcedo:value-object](https://central.sonatype.com/artifact/io.joshuasalcedo/value-object) (email,
+  phone number, money, IBAN, address, date range...) as a model, checked and printed by the Java class itself; plus
+  file, image, video and audio
+- Two dependencies: Google's [CEL](https://github.com/google/cel-java) and io.joshuasalcedo:value-object
 
 Documentation: <https://joshuasalcedo-dev.github.io/schema-model/>
 
@@ -163,7 +166,7 @@ adapters come with the library.
 | `...schema.engine` | The `Engine` that runs everything, and Java handlers actions can call |
 | `...schema.port.in` / `port.out` | What callers use (`Platform`, `ModelDesign`); what an application plugs in (storage, events, vocabulary) |
 | `...schema.adapter` | In-memory adapters for the outbound ports |
-| `...schema.predefined` | Money, EmailAddress, Address, countries, currencies |
+| `...schema.predefined` | `ValueObjectLibrary` (the value-object models), `MediaObjects` (file, image, video, audio) |
 | `...schema.rules` | Ready-made rules (templates that become invariants) and named text patterns |
 | `...schema.text` | Values as text for people: formats and labels |
 
@@ -180,3 +183,26 @@ publishes the site to GitHub Pages on every push to main.
 ## Licence
 
 [Apache License 2.0](LICENSE)
+
+## Predefined value objects
+
+`ValueObjectLibrary.install(engine.models())` adds a model for each value object of io.joshuasalcedo:value-object,
+named after its class (`Email` is `email`, `PhoneNumber` is `phone-number`). A value for one of them is checked by its
+Java class and stored as Java cleaned it up, given as text or as an object:
+
+```java
+ValueObjectLibrary.install(engine.models());
+engine.models().createModel(Model.entity("Customer")
+        .field(Field.text("id").identity().required())
+        .field(Field.model("email", "email").required())
+        .field(Field.model("phone", "phone-number"))
+        .build());
+
+engine.create("customer", Map.of("id", "c-1", "email", " Mia@Example.com ", "phone", "+63 917 123 4567"));
+// email: {value=mia@example.com}, phone: {countryCode=63, nationalNumber=9171234567}
+```
+
+Changed in 0.3.0: the IDs are the library's class names. 0.2.0's hand-written models are gone; the main renames are
+`email-address` to `email`, `bank-account` to `iban`, `person` to `full-name` or `party`, `ssh-connection` and
+`recurrence` (no library class) to your own models. `file`, `image`, `video` and `audio` are in `MediaObjects`.
+

@@ -13,7 +13,8 @@ import org.junit.jupiter.api.Test;
 import io.joshuasalcedo.schema.Field;
 import io.joshuasalcedo.schema.Model;
 import io.joshuasalcedo.schema.Schema;
-import io.joshuasalcedo.schema.predefined.ValueObjects;
+import io.joshuasalcedo.schema.predefined.ValueObjectLibrary;
+import io.joshuasalcedo.valueobject.ValueObject;
 import io.joshuasalcedo.schema.record.Record;
 import io.joshuasalcedo.schema.record.RecordValues;
 
@@ -23,7 +24,7 @@ class ValueFormatsTest {
             .field(Field.text("id").identity().required())
             .field(Field.text("name"))
             .build();
-    private static final Schema SCHEMA = ValueObjects.install(Schema.builder()).model(CUSTOMER).build();
+    private static final Schema SCHEMA = ValueObjectLibrary.install(Schema.builder()).model(CUSTOMER).build();
     private static final RecordLookup LOOKUP = model -> model.equals("customer")
             ? List.of(new Record("customer", "c-1", Map.of("id", "c-1", "name", "Alice"), 1)) : List.of();
     private static final ValueFormats FORMATS = ValueFormats.defaults(SCHEMA, LOOKUP, Locale.US, ZoneOffset.UTC);
@@ -37,33 +38,21 @@ class ValueFormatsTest {
 
     @Test
     void predefinedValueObjectsLookLikeTheirJavaToString() {
-        assertThat(text("money", Map.of("amount", "1234.50",
-                                        "currency", Map.of("type", "FiatCurrency", "code", "PHP"))))
-                .isEqualTo("PHP 1,234.50");
-        assertThat(text("full-name", Map.of("firstName", "Juan", "lastName", "Dela Cruz")))
-                .isEqualTo("Juan Dela Cruz");
-        assertThat(text("address", Map.of("street", "1 Ayala Ave", "city", "Makati", "postalCode", "1226",
-                                          "country", "PHILIPPINES")))
-                .isEqualTo("1 Ayala Ave, Makati 1226, Philippines");
-        assertThat(text("phone-number", Map.of("countryCode", "+63", "nationalNumber", "917 123 4567")))
-                .isEqualTo("+63 9171234567");
-        assertThat(text("coordinates", Map.of("latitude", "14.5547", "longitude", "-121.0244")))
-                .isEqualTo("14.5547° N, 121.0244° W");
-        assertThat(text("weight", Map.of("value", "1.250", "unit", "KILOGRAM"))).isEqualTo("1.25 kg");
-        assertThat(text("percentage", Map.of("value", "12.5"))).isEqualTo("12.5%");
+        // given as text, stored as the Java value object cleaned it up, printed as it prints itself
+        String[][] samples = {
+                {"email", "EMAIL", "  Alice@Example.COM "},
+                {"phone-number", "PHONE_NUMBER", "+63 917 123 4567"},
+                {"money", "MONEY", "PHP 1,234.50"},
+                {"iban", "IBAN", "DE89 3704 0044 0532 0130 00"},
+                {"link", "LINK", "https://example.com/a"},
+        };
+        for (String[] sample : samples) {
+            String expected = ValueObject.Type.valueOf(sample[1]).parse(sample[2]).toString();
+            assertThat(text(sample[0], ValueObjectLibrary.parse(sample[0], sample[2]))).as(sample[0]).isEqualTo(expected);
+        }
         assertThat(text("date-range", Map.of("startDate", "2026-10-18", "endDate", "2026-10-20")))
-                .isEqualTo("Oct 18, 2026 – Oct 20, 2026");
-        assertThat(text("time", Map.of("hour", 10, "minute", 5, "meridiem", "PM"))).isEqualTo("10:05 PM");
-        assertThat(text("recurrence", Map.of("frequency", "WEEKLY", "interval", 2))).isEqualTo("every 2 weeks");
-        assertThat(text("recurrence", Map.of("frequency", "DAILY", "interval", 1))).isEqualTo("every day");
-        assertThat(text("semantic-version", Map.of("major", 1, "minor", 2, "patch", 3, "preRelease", "rc.1",
-                                                   "buildMetadata", "build.5"))).isEqualTo("1.2.3-rc.1+build.5");
-        assertThat(text("color", Map.of("red", 255, "green", 128))).isEqualTo("#FF8000");
-        assertThat(text("color", Map.of("red", 255, "alpha", 128))).isEqualTo("#FF000080");
-        assertThat(text("ssh-connection", Map.of("host", Map.of("value", "10.0.0.5"), "port", Map.of("value", 22),
-                                                 "username", "deploy"))).isEqualTo("deploy@10.0.0.5:22");
-        assertThat(text("duration-nano", Map.of("nanos", 1_500_000_000L))).isEqualTo("1.5 s");
-        assertThat(text("duration-nano", Map.of("nanos", 3_725_000_000_000L))).isEqualTo("1h 2m");
+                .isEqualTo(ValueObjectLibrary.text("date-range",
+                        Map.of("startDate", LocalDate.of(2026, 10, 18), "endDate", LocalDate.of(2026, 10, 20))));
     }
 
     @Test

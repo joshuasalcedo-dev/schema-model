@@ -1,6 +1,7 @@
 package io.joshuasalcedo.schema.record;
 
 import java.math.BigDecimal;
+import io.joshuasalcedo.schema.predefined.ValueObjectLibrary;
 import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -280,6 +281,20 @@ public final class RecordValues {
                     }
                     context.references().add(Map.entry(target.id(), id));
                     return id;
+                }
+                if (ValueObjectLibrary.isLibraryModel(target)) {
+                    // checked and cleaned up by its Java value object (io.joshuasalcedo:value-object): text is parsed,
+                    // an object goes through the record's constructor
+                    if (!(raw instanceof Map<?, ?>) && !(raw instanceof CharSequence)) {
+                        add(context, at, "must be a " + target.displayName() + " as text or as an object");
+                        return null;
+                    }
+                    try {
+                        raw = ValueObjectLibrary.parse(target.id(), raw instanceof CharSequence c ? c.toString() : raw);
+                    } catch (IllegalArgumentException e) {
+                        add(context, at, "is not a valid " + target.displayName() + ": " + e.getMessage());
+                        return null;
+                    }
                 }
                 if (!(raw instanceof Map<?, ?> map)) {
                     add(context, at, "must be a " + target.displayName() + " object");
