@@ -166,7 +166,7 @@ adapters come with the library.
 | `...schema.engine` | The `Engine` that runs everything, and Java handlers actions can call |
 | `...schema.port.in` / `port.out` | What callers use (`Platform`, `ModelDesign`); what an application plugs in (storage, events, vocabulary) |
 | `...schema.adapter` | In-memory adapters for the outbound ports |
-| `...schema.predefined` | `ValueObjectLibrary` (the value-object models), `MediaObjects` (file, image, video, audio) |
+| `...schema.predefined` | `ValueObjectLibrary` (the value-object models), `CommonObjects` (person, company, bank account, currency, time zones, recurrence...), `MediaObjects` (file, image, video, audio) |
 | `...schema.rules` | Ready-made rules (templates that become invariants) and named text patterns |
 | `...schema.text` | Values as text for people: formats and labels |
 
@@ -186,12 +186,21 @@ publishes the site to GitHub Pages on every push to main.
 
 ## Predefined value objects
 
-`ValueObjectLibrary.install(engine.models())` adds a model for each value object of io.joshuasalcedo:value-object,
-named after its class (`Email` is `email`, `PhoneNumber` is `phone-number`). A value for one of them is checked by its
-Java class and stored as Java cleaned it up, given as text or as an object:
+`CommonObjects.installAll(engine.models())` adds every predefined value object, in dependency order:
+
+- **`ValueObjectLibrary`**: a model for each value object of io.joshuasalcedo:value-object, named after its class
+  (`Email` is `email`, `PhoneNumber` is `phone-number`). Fields come from the record's components; a field is
+  required when Java requires it (`@NullMarked` without `@Nullable`); enums, and interfaces such as `Currency`, are
+  choices. A value is checked by the Java class and stored as Java cleaned it up, given as text or as an object.
+  Descriptions, limits and cross-field rules are kept with the models (`value-object-metadata.tsv`). Technical value
+  objects (`jwt-token`, `hashed-password`, `table`, `pdf-file`) get no model.
+- **`CommonObjects`**: value objects the library has no class for, written by hand: `person`, `company`,
+  `bank-account`, `currency`, `ip-address`, `ssh-connection`, `time-zone`, `zoned-date-time`, `time-of-day`,
+  `effective-period`, `time-block`, `recurrence`.
+- **`MediaObjects`**: `file`, `image`, `video`, `audio`, for uploads.
 
 ```java
-ValueObjectLibrary.install(engine.models());
+CommonObjects.installAll(engine.models());
 engine.models().createModel(Model.entity("Customer")
         .field(Field.text("id").identity().required())
         .field(Field.model("email", "email").required())
@@ -202,7 +211,5 @@ engine.create("customer", Map.of("id", "c-1", "email", " Mia@Example.com ", "pho
 // email: {value=mia@example.com}, phone: {countryCode=63, nationalNumber=9171234567}
 ```
 
-Changed in 0.3.0: the IDs are the library's class names. 0.2.0's hand-written models are gone; the main renames are
-`email-address` to `email`, `bank-account` to `iban`, `person` to `full-name` or `party`, `ssh-connection` and
-`recurrence` (no library class) to your own models. `file`, `image`, `video` and `audio` are in `MediaObjects`.
-
+Changed in 0.3.0: the library's models use its class names, so `email-address` is now `email` (and a bank account's
+IBAN alone is `iban`; `bank-account` is still there). `ValueObjects.install` is now `CommonObjects.installAll`.

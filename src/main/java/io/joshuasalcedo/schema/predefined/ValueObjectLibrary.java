@@ -1,10 +1,19 @@
 package io.joshuasalcedo.schema.predefined;
 
 import io.joshuasalcedo.schema.Field;
+import io.joshuasalcedo.schema.Ids;
+import io.joshuasalcedo.schema.Normalize;
 import io.joshuasalcedo.schema.Model;
 import io.joshuasalcedo.schema.Schema;
 import io.joshuasalcedo.schema.port.in.ModelDesign;
 import io.joshuasalcedo.valueobject.ValueObject;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -14,6 +23,7 @@ import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -57,11 +67,24 @@ import java.util.Set;
  */
 public final class ValueObjectLibrary {
 
+    /**
+     * Value objects that are not business values (security tokens, file and table helpers): no model is made for
+     * them.
+     */
+    public static final Set<String> EXCLUDED = Set.of("jwt-token", "hashed-password", "table", "pdf-file");
+
+    private static final String METADATA = "value-object-metadata.tsv";
+
     private static final Map<String, Class<?>> CLASSES = new LinkedHashMap<>();
     private static final Map<String, Model> MODELS = new LinkedHashMap<>();
     private static final Map<Class<?>, ValueObject.Type> TYPES = new LinkedHashMap<>();
+    /** model -> field ("" for the model itself) -> key -> value, from {@value #METADATA}. */
+    private static final Map<String, Map<String, Map<String, String>>> META = new LinkedHashMap<>();
+    /** model -> its rules (expression, message), from {@value #METADATA}. */
+    private static final Map<String, List<String[]>> RULES = new LinkedHashMap<>();
 
     static {
+        loadMetadata();
         for (ValueObject.Type type : ValueObject.Type.values()) {
             TYPES.putIfAbsent(type.type(), type);
         }
@@ -181,27 +204,33 @@ public final class ValueObjectLibrary {
                 add(held, visiting);
             }
         }
-        Model.Builder builder = Model.valueObject(type.getSimpleName())
-                .description("The Java value object " + type.getName() + " (io.joshuasalcedo:value-object).");
+        String id = Ids.fromDisplayName(type.getSimpleName());
+        if (EXCLUDED.contains(id) || CLASSES.containsKey(id)) {
+            return; // not a business value, or two classes with one simple name (the first one keeps the ID)
+        }
+        Map<String, Map<String, String>> meta = META.getOrDefault(id, Map.of());
+        Model.Builder builder = Model.valueObject(type.getSimpleName()).description(description(type, meta));
         for (RecordComponent component : type.getRecordComponents()) {
-            builder.field(field(component));
+            Field.Builder field = field(component);
+            apply(field, meta.getOrDefault(component.getName(), Map.of()));
+            builder.field(field.build());
+        }
+        for (String[] rule : RULES.getOrDefault(id, List.of())) {
+            builder.invariant(rule[0], rule[1]);
         }
         Model model = builder.build();
-        if (CLASSES.containsKey(model.id())) {
-            return; // two classes with one simple name: the first one keeps the ID
-        }
         CLASSES.put(model.id(), type);
         MODELS.put(model.id(), model);
     }
 
-    private static Field field(RecordComponent component) {
+    private static Field.Builder field(RecordComponent component) {
         Class<?> raw = component.getType();
         boolean repeated = Collection.class.isAssignableFrom(raw);
         Class<?> type = elementClass(component.getGenericType(), raw);
         Field.Builder field;
-        if (type.isEnum()) {
-            field = Field.choice(component.getName(),
-                    Arrays.stream(type.getEnumConstants()).map(c -> ((Enum<?>) c).name()).toArray(String[]::new));
+        List<String> constants = constants(type);
+        if (!constants.isEmpty()) {
+            field = Field.choice(component.getName(), constants.toArray(String[]::new));
         } else if (type.isRecord() && ValueObject.class.isAssignableFrom(type)) {
             field = Field.model(component.getName(), Model.valueObject(type.getSimpleName()).build().id());
         } else if (type == boolean.class || type == Boolean.class) {
@@ -220,10 +249,118 @@ public final class ValueObjectLibrary {
         if (repeated) {
             field.repeated();
         }
-        if (raw.isPrimitive()) {
+        if (required(component)) {
             field.required();
         }
-        return field.build();
+        return field;
+    }
+
+    /**
+     * The constants a component can hold: an enum's, or for an interface (such as {@code Currency}) the constants of
+     * every enum of the library that implements it; empty for anything else.
+     */
+    private static List<String> constants(Class<?> type) {
+        List<Class<?>> enums = type.isEnum() ? List.of(type)
+                : type.isInterface()
+                        ? TYPES.keySet().stream().filter(c -> c.isEnum() && type.isAssignableFrom(c)).toList()
+                        : List.of();
+        List<String> names = new ArrayList<>();
+        for (Class<?> e : enums) {
+            for (Object constant : e.getEnumConstants()) {
+                String name = ((Enum<?>) constant).name();
+                if (!names.contains(name)) {
+                    names.add(name);
+                }
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Whether the Java value object rejects a missing value: a primitive, or (in a {@code @NullMarked} package or
+     * class, as the library's are) a component not marked {@code @Nullable}. Lists and Optionals never are.
+     */
+    private static boolean required(RecordComponent component) {
+        Class<?> raw = component.getType();
+        if (raw.isPrimitive()) {
+            return true;
+        }
+        if (raw == Optional.class || Collection.class.isAssignableFrom(raw)) {
+            return false;
+        }
+        boolean nullable = has(component.getAnnotatedType(), "Nullable") || has(component, "Nullable");
+        Class<?> owner = component.getDeclaringRecord();
+        boolean marked = has(owner, "NullMarked") || (owner.getPackage() != null && has(owner.getPackage(), "NullMarked"));
+        return marked && !nullable;
+    }
+
+    /** Whether an annotation of this simple name is present (jspecify's, or another library's of that name). */
+    private static boolean has(AnnotatedElement element, String simpleName) {
+        for (Annotation annotation : element.getAnnotations()) {
+            if (annotation.annotationType().getSimpleName().equals(simpleName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------ descriptions, limits and rules
+
+    private static String description(Class<?> type, Map<String, Map<String, String>> meta) {
+        String carried = meta.getOrDefault("", Map.of()).get("description");
+        String source = "Checked and printed by the Java value object " + type.getName()
+                + " (io.joshuasalcedo:value-object).";
+        ValueObject.Type known = TYPES.get(type);
+        String shape = known != null && known.detectable() && known.shape() != null && !known.shape().isBlank()
+                ? " As text it looks like: " + known.shape()
+                : "";
+        return (carried == null ? "" : carried + " ") + source + shape;
+    }
+
+    private static void apply(Field.Builder field, Map<String, String> meta) {
+        meta.forEach((key, value) -> {
+            switch (key) {
+                case "description" -> field.description(value);
+                case "pattern" -> field.pattern(value);
+                case "min" -> field.min(value);
+                case "max" -> field.max(value);
+                case "minLength" -> field.minLength(Integer.parseInt(value));
+                case "maxLength" -> field.maxLength(Integer.parseInt(value));
+                case "scale" -> field.scale(Integer.parseInt(value));
+                case "normalize" -> field.normalize(Arrays.stream(value.split(","))
+                        .filter(step -> !step.isBlank())
+                        .map(Normalize::valueOf)
+                        .toArray(Normalize[]::new));
+                default -> throw new IllegalStateException(METADATA + ": unknown key " + key);
+            }
+        });
+    }
+
+    /** Reads {@value #METADATA}: kind, model, field, key, value separated by tabs, a line each; # starts a comment. */
+    private static void loadMetadata() {
+        try (InputStream in = ValueObjectLibrary.class.getResourceAsStream(METADATA)) {
+            if (in == null) {
+                return;
+            }
+            BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+            for (String line; (line = reader.readLine()) != null; ) {
+                if (line.isBlank() || line.startsWith("#")) {
+                    continue;
+                }
+                String[] p = line.split("\t", 5);
+                switch (p[0]) {
+                    case "model" -> META.computeIfAbsent(p[1], k -> new LinkedHashMap<>())
+                            .computeIfAbsent("", k -> new LinkedHashMap<>()).put(p[3], p[4]);
+                    case "field" -> META.computeIfAbsent(p[1], k -> new LinkedHashMap<>())
+                            .computeIfAbsent(p[2], k -> new LinkedHashMap<>()).put(p[3], p[4]);
+                    case "invariant" -> RULES.computeIfAbsent(p[1], k -> new ArrayList<>())
+                            .add(new String[]{p[3], p[4]});
+                    default -> throw new IllegalStateException(METADATA + ": unknown kind " + p[0]);
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static Class<?> elementClass(Type generic, Class<?> raw) {

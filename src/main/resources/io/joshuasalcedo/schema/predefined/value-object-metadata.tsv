@@ -1,0 +1,153 @@
+# Descriptions, limits, clean-up and rules for the value-object models, carried over from schema-model 0.2.0's
+# hand-written models (ValueObjects) for every model and field that still exists. Java checks values first;
+# these describe the result and must agree with it (ValueObjectLibraryTest checks realistic values).
+# kind	model	name	key	value
+model	username		description	Canonical case-insensitive username, independent of the user's stable ID.
+field	username	value	description	3 to 64 characters of letters, digits, dots, underscores and hyphens, starting with a letter or digit; stored lower-case.
+field	username	value	pattern	[a-z0-9][a-z0-9._-]{2,63}
+field	username	value	normalize	TRIM,LOWERCASE
+model	email		description	Case-insensitive email identity with unquoted mailbox syntax; ownership is not verified and provider aliases are never rewritten.
+field	email	value	description	local@domain, stored lower-case, at most 254 characters; the local part is at most 64 characters and the domain is a valid DomainName (an internationalised domain is stored in its ASCII form).
+field	email	value	pattern	(?=.{3,254}$)(?=[^@]{1,64}@)[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?![0-9]+$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?
+field	email	value	normalize	TRIM,LOWERCASE
+model	full-name		description	A person's name: a first name and an optional middle and last name.
+field	full-name	firstName	description	Letters, single spaces, hyphens and apostrophes, starting with a letter; 1 to 50 characters, trimmed.
+field	full-name	firstName	pattern	(?=.{1,50}$)\p{L}[\p{L}'-]*(?: [\p{L}'-]+)*
+field	full-name	firstName	normalize	TRIM,COLLAPSE_SPACES
+field	full-name	middleName	description	Letters, single spaces, hyphens and apostrophes, starting with a letter; 1 to 50 characters, trimmed.
+field	full-name	middleName	pattern	(?=.{1,50}$)\p{L}[\p{L}'-]*(?: [\p{L}'-]+)*
+field	full-name	middleName	normalize	TRIM,COLLAPSE_SPACES,BLANK_TO_ABSENT
+field	full-name	lastName	description	Letters, single spaces, hyphens and apostrophes, starting with a letter; 1 to 50 characters, trimmed.
+field	full-name	lastName	pattern	(?=.{1,50}$)\p{L}[\p{L}'-]*(?: [\p{L}'-]+)*
+field	full-name	lastName	normalize	TRIM,COLLAPSE_SPACES,BLANK_TO_ABSENT
+model	phone-number		description	A phone number in E.164 form: a country calling code and a national number.
+field	phone-number	countryCode	description	The country calling code, 1 to 3 digits; '+', spaces and punctuation are dropped, so +63 is stored as 63.
+field	phone-number	countryCode	pattern	[0-9]{1,3}
+field	phone-number	countryCode	normalize	DIGITS_ONLY
+field	phone-number	nationalNumber	description	The national number, digits only; spaces, dashes and brackets are dropped.
+field	phone-number	nationalNumber	pattern	[0-9]{1,14}
+field	phone-number	nationalNumber	normalize	DIGITS_ONLY
+invariant	phone-number		size(value.countryCode) + size(value.nationalNumber) <= 15	an E.164 number has at most 15 digits
+model	link		description	A URL: text that parses as a URI with a scheme.
+field	link	value	description	A URI with a scheme, such as https://example.com. The full java.net.URI syntax check is not repeated here.
+field	link	value	pattern	[A-Za-z][A-Za-z0-9+.-]*:\S+
+field	link	value	normalize	TRIM
+model	address		description	A physical address in any international format; only the country is required. Blank parts are left out, as the Java record turns them into null.
+field	address	street	description	The street and number.
+field	address	street	normalize	TRIM,BLANK_TO_ABSENT
+field	address	city	normalize	TRIM,BLANK_TO_ABSENT
+field	address	stateOrProvince	normalize	TRIM,BLANK_TO_ABSENT
+field	address	postalCode	description	The postal or ZIP code, as written.
+field	address	postalCode	normalize	TRIM,BLANK_TO_ABSENT
+field	address	country	description	A Country constant; UNKNOWN when the country is not known.
+field	address	country	normalize	TRIM,UPPERCASE
+field	address	addressLine2	description	A second line, such as an apartment or suite.
+field	address	addressLine2	normalize	TRIM,BLANK_TO_ABSENT
+model	money		description	A monetary amount with its currency; never a floating-point number.
+field	money	amount	description	The amount. The Java value object rounds it half-even to the currency's decimal places (2 for most fiat currencies, 8 for BTC, ...); round it the same way before saving.
+model	percentage		description	A percentage, where 100 is the whole: 25 means 25%.
+field	percentage	value	description	The percentage, such as 12.5 for 12.5%, rounded half-even to four decimal places; it may be negative or above 100.
+field	percentage	value	scale	4
+model	crypto-currency-address		description	A wallet address on a coin's network.
+field	crypto-currency-address	address	description	The address text; its format is not checked.
+field	crypto-currency-address	coin	normalize	TRIM,UPPERCASE
+model	coordinates		description	Geographic coordinates: a latitude and a longitude in degrees.
+field	coordinates	latitude	description	Degrees, from -90 to 90.
+field	coordinates	latitude	min	-90
+field	coordinates	latitude	max	90
+field	coordinates	longitude	description	Degrees, from -180 to 180.
+field	coordinates	longitude	min	-180
+field	coordinates	longitude	max	180
+model	postal-code		description	A postal or ZIP code whose format follows its country's rules.
+field	postal-code	value	description	Stored upper-case: 2 to 10 letters, digits, spaces and hyphens, in the country's format where PostalCode knows one (e.g. UNITED_STATES 12345 or 12345-6789, CANADA A1A 1A1, UNITED_KINGDOM SW1A 1AA, JAPAN 123-4567).
+field	postal-code	value	pattern	[A-Z0-9-][A-Z0-9 -]{0,8}[A-Z0-9-]
+field	postal-code	value	normalize	TRIM,UPPERCASE
+field	postal-code	country	description	The country whose format the code follows.
+field	postal-code	country	normalize	TRIM,UPPERCASE
+invariant	postal-code		!(value.country in {'AUSTRALIA': r'^\d{4}$', 'BELGIUM': r'^\d{4}$', 'BRAZIL': r'^\d{5}-?\d{3}$', 'CANADA': r'^[A-Z]\d[A-Z][ -]?\d[A-Z]\d$', 'CHINA': r'^\d{6}$', 'FRANCE': r'^\d{5}$', 'GERMANY': r'^\d{5}$', 'INDIA': r'^\d{6}$', 'ITALY': r'^\d{5}$', 'JAPAN': r'^\d{3}-?\d{4}$', 'MEXICO': r'^\d{5}$', 'NETHERLANDS': r'^\d{4}[ ]?[A-Z]{2}$', 'POLAND': r'^\d{2}-?\d{3}$', 'RUSSIA': r'^\d{6}$', 'SOUTH_KOREA': r'^\d{5}$', 'SPAIN': r'^\d{5}$', 'SWEDEN': r'^\d{3}[ ]?\d{2}$', 'SWITZERLAND': r'^\d{4}$', 'UNITED_KINGDOM': r'^[A-Z]{1,2}\d[A-Z\d]?[ ]?\d[A-Z]{2}$', 'UNITED_STATES': r'^\d{5}(-\d{4})?$'}) || value.value.matches({'AUSTRALIA': r'^\d{4}$', 'BELGIUM': r'^\d{4}$', 'BRAZIL': r'^\d{5}-?\d{3}$', 'CANADA': r'^[A-Z]\d[A-Z][ -]?\d[A-Z]\d$', 'CHINA': r'^\d{6}$', 'FRANCE': r'^\d{5}$', 'GERMANY': r'^\d{5}$', 'INDIA': r'^\d{6}$', 'ITALY': r'^\d{5}$', 'JAPAN': r'^\d{3}-?\d{4}$', 'MEXICO': r'^\d{5}$', 'NETHERLANDS': r'^\d{4}[ ]?[A-Z]{2}$', 'POLAND': r'^\d{2}-?\d{3}$', 'RUSSIA': r'^\d{6}$', 'SOUTH_KOREA': r'^\d{5}$', 'SPAIN': r'^\d{5}$', 'SWEDEN': r'^\d{3}[ ]?\d{2}$', 'SWITZERLAND': r'^\d{4}$', 'UNITED_KINGDOM': r'^[A-Z]{1,2}\d[A-Z\d]?[ ]?\d[A-Z]{2}$', 'UNITED_STATES': r'^\d{5}(-\d{4})?$'}[value.country])	the postal code does not match the country's format
+model	slug		description	A URL-friendly slug: lower-case letters and digits separated by single hyphens.
+field	slug	value	description	At most 100 characters, such as my-first-post; stored lower-case.
+field	slug	value	pattern	[a-z0-9]+(?:-[a-z0-9]+)*
+field	slug	value	maxLength	100
+field	slug	value	normalize	TRIM,LOWERCASE
+model	distance		description	A distance: a value in a metric or imperial unit, never negative.
+field	distance	value	description	The number of units, 0 or more.
+field	distance	value	min	0
+field	distance	unit	normalize	TRIM,UPPERCASE
+model	weight		description	A weight or mass: a value in a metric or imperial unit, never negative.
+field	weight	value	description	The number of units, 0 or more.
+field	weight	value	min	0
+field	weight	unit	normalize	TRIM,UPPERCASE
+model	quantity		description	A quantity of something in a unit: 3 pieces, 2.5 hours, 12 m2. The unit is a UN/CEFACT code (C62 piece, HUR hour, MTK square metre) or the business's own word.
+field	quantity	unit	description	The unit, such as C62, HUR, MTK, or each, box, visit.
+field	quantity	unit	normalize	TRIM,COLLAPSE_SPACES
+model	file-size		description	A file or data size: a value in a binary (IEC) or decimal (SI) unit, never negative.
+field	file-size	value	description	The number of units, 0 or more.
+field	file-size	value	min	0
+field	file-size	unit	normalize	TRIM,UPPERCASE
+model	domain-name		description	A multi-label DNS name in lower-case ASCII; syntax only, not registration or DNS existence.
+field	domain-name	value	description	At least two labels, at most 253 characters, no trailing dot, a TLD that is not all digits; an internationalised name is stored in its ASCII (punycode) form.
+field	domain-name	value	pattern	(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?![0-9]+$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?
+field	domain-name	value	normalize	TRIM,IDN_ASCII
+model	ipv4-address		description	An IPv4 address in dotted decimal form.
+field	ipv4-address	value	description	Four octets from 0 to 255 without leading zeros, such as 192.168.0.1.
+field	ipv4-address	value	pattern	(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])
+field	ipv4-address	value	normalize	TRIM
+model	ipv6-address		description	An IPv6 address, stored as eight groups the way InetAddress.getHostAddress() writes it.
+field	ipv6-address	value	description	Any IPv6 literal (2001:DB8::1, ::1, ...) is stored as eight groups of lower-case hexadecimal without leading zeros, such as 2001:db8:0:0:0:0:0:1. Zone suffixes such as %eth0 are not supported.
+field	ipv6-address	value	pattern	(?:(?:0|[1-9a-f][0-9a-f]{0,3}):){7}(?:0|[1-9a-f][0-9a-f]{0,3})
+field	ipv6-address	value	normalize	TRIM,IPV6_CANONICAL
+model	mac-address		description	A MAC (Media Access Control) address of six bytes.
+model	port		description	A network port number.
+field	port	value	description	From 0 to 65535.
+field	port	value	min	0
+field	port	value	max	65535
+model	date-of-birth		description	A date of birth.
+field	date-of-birth	value	description	Not in the future.
+invariant	date-of-birth		value.value <= today	a date of birth cannot be in the future
+model	date-range		description	A range between two dates, both included.
+field	date-range	endDate	description	Not before the start date.
+invariant	date-range		value.endDate >= value.startDate	the end date cannot be before the start date
+model	date-time-with-zone		description	A point in time that keeps its offset from UTC (an OffsetDateTime).
+field	date-time-with-zone	value	description	ISO-8601 with an offset, such as 2026-10-18T14:00:00+08:00 or 2026-10-18T06:00Z. Kept as text because a TIMESTAMP field would drop the offset; whether the day exists in its month is not checked here.
+field	date-time-with-zone	value	pattern	[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\.[0-9]{1,9})?)?(?:Z|[+-](?:0[0-9]|1[0-8]):[0-5][0-9](?::[0-5][0-9])?)
+field	date-time-with-zone	value	normalize	TRIM
+model	duration-nano		description	A duration of time, counted in nanoseconds.
+field	duration-nano	nanos	description	The length in nanoseconds, 0 or more.
+field	duration-nano	nanos	min	0
+model	time		description	A time of day in 12-hour format.
+field	time	hour	description	The hour on the 12-hour clock, 1 to 12.
+field	time	hour	min	1
+field	time	hour	max	12
+field	time	minute	description	The minute, 0 to 59.
+field	time	minute	min	0
+field	time	minute	max	59
+field	time	meridiem	normalize	TRIM,UPPERCASE
+model	timestamp		description	A point in time (an Instant, in UTC).
+model	semantic-version		description	A semantic version (SemVer 2.0.0): MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD].
+field	semantic-version	major	description	0 or more.
+field	semantic-version	major	min	0
+field	semantic-version	minor	description	0 or more.
+field	semantic-version	minor	min	0
+field	semantic-version	patch	description	0 or more.
+field	semantic-version	patch	min	0
+field	semantic-version	preRelease	description	The pre-release identifier, such as rc.1; absent for a release.
+field	semantic-version	preRelease	pattern	(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*
+field	semantic-version	buildMetadata	description	The build metadata, such as build.5; absent for none.
+field	semantic-version	buildMetadata	pattern	[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*
+model	color		description	A color as red, green, blue and alpha components.
+field	color	red	description	0 to 255; absent means 0.
+field	color	red	min	0
+field	color	red	max	255
+field	color	green	description	0 to 255; absent means 0.
+field	color	green	min	0
+field	color	green	max	255
+field	color	blue	description	0 to 255; absent means 0.
+field	color	blue	min	0
+field	color	blue	max	255
+field	color	alpha	description	0 (transparent) to 255 (opaque); absent means 255.
+field	color	alpha	min	0
+field	color	alpha	max	255
+model	count		description	A whole number of things, zero or more.
+field	count	value	description	0 or more.
+field	count	value	min	0
